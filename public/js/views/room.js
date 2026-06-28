@@ -1,478 +1,615 @@
+'use strict';
+
+/**
+ * Room view — meeting with WebRTC mesh + OpenAI Realtime interpreter.
+ *
+ * Design:
+ *   - ONE single "My language" selector (seeded from user.native_language).
+ *     Each participant hears EVERYTHING in their own language because their
+ *     own browser runs a Realtime interpreter session that translates all
+ *     incoming peer audio into that language.
+ *   - Peer-to-peer audio/video over a WebRTC mesh, signaled via Socket.IO.
+ *     Server protocol (defined in sockets/index.js):
+ *       client → server: room:join, lang:update, webrtc:offer/answer/ice,
+ *                         media:state, room:leave
+ *       server → client: room:joined {room, peers}, peer:joined, peer:left,
+ *                         peer:lang, webrtc:offer/answer/ice, media:state,
+ *                         room:error
+ *     Each peer object includes { userId, displayName, socketId,
+ *     sourceLang, targetLang }. The newcomer creates offers for every
+ *     existing peer to avoid glare.
+ */
+
 (function () {
-  'use strict';
+  const PREF_KEY = 'bilingo.myLang';
+  const ICE_SERVERS = [{ urls: ['stun:stun.l.google.com:19302'] }];
 
-  var ICE_CONFIG = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
-  };
-
-  // Common languages supported by MyMemory
-  var LANGUAGES = [
-    { code: 'en', label: 'Inglés' },
-    { code: 'es', label: 'Español' },
-    { code: 'fr', label: 'Francés' },
-    { code: 'de', label: 'Alemán' },
-    { code: 'it', label: 'Italiano' },
-    { code: 'pt', label: 'Portugués' },
-    { code: 'ru', label: 'Ruso' },
-    { code: 'ja', label: 'Japonés' },
-    { code: 'ko', label: 'Coreano' },
-    { code: 'zh', label: 'Chino' },
-    { code: 'ar', label: 'Árabe' },
-    { code: 'nl', label: 'Holandés' },
-    { code: 'pl', label: 'Polaco' },
-    { code: 'tr', label: 'Turco' },
-    { code: 'sv', label: 'Sueco' },
-    { code: 'el', label: 'Griego' },
-    { code: 'hi', label: 'Hindi' },
-    { code: 'ca', label: 'Catalán' }
-  ];
-
-  function langOptions(selected) {
-    return LANGUAGES.map(function (l) {
-      return '<option value="' + l.code + '"' + (l.code === selected ? ' selected' : '') + '>' + l.label + '</option>';
-    }).join('');
+  function getBase() {
+    return (window.__APP_BASE__) ||
+      (document.querySelector('base')?.getAttribute('href')) ||
+      '';
   }
 
-  function langLabel(code) {
-    var found = LANGUAGES.find(function (l) { return l.code === code; });
-    return found ? found.label : code;
+  function getMyLang(user) {
+    try {
+      const stored = localStorage.getItem(PREF_KEY);
+      if (stored) return stored;
+    } catch (_) {}
+    if (user && user.native_language) return String(user.native_language).toLowerCase().split('-')[0];
+    return 'en';
+  }
+  function setMyLang(code) {
+    try { localStorage.setItem(PREF_KEY, code); } catch (_) {}
+  }
+
+  const LANGS = [
+    ['es', 'Español'], ['en', 'English'], ['pt', 'Português'],
+    ['fr', 'Français'], ['de', 'Deutsch'], ['it', 'Italiano'],
+    ['zh', '中文'], ['ja', '日本語'], ['ko', '한국어'],
+    ['ar', 'العربية'], ['ru', 'Русский'], ['nl', 'Nederlands'],
+    ['pl', 'Polski'], ['tr', 'Türkçe'], ['hi', 'हिन्दी']
+  ];
+
+  function el(tag, attrs, children) {
+    const n = document.createElement(tag);
+    if (attrs) Object.entries(attrs).forEach(([k, v]) => {
+      if (k === 'class') n.className = v;
+      else if (k === 'style' && typeof v === 'object') Object.assign(n.style, v);
+      else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (v !== false && v != null) n.setAttribute(k, v);
+    });
+    (Array.isArray(children) ? children : [children]).forEach(c => {
+      if (c == null) return;
+      n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+    return n;
+  }
+
+  function injectCss() {
+    if (document.getElementById('roomViewInlineCss')) return;
+    const css = el('style', { id: 'roomViewInlineCss' });
+    css.textContent = `
+      .room-view { display:flex; flex-direction:column; height:calc(100vh - 80px); gap:12px; padding:12px; }
+      .room-topbar { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 1px 2px rgba(0,0,0,.04); flex-wrap:wrap; gap:10px; }
+      .room-title { display:flex; align-items:center; gap:10px; font-weight:700; color:#111827; }
+      .room-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      .room-lang { display:flex; align-items:center; gap:6px; font-size:14px; color:#6b7280; }
+      .lang-select { padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; font-size:14px; }
+      .rv-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 12px; border-radius:8px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; font-size:14px; color:#111827; }
+      .rv-btn:hover { background:#f9fafb; }
+      .rv-btn.icon { width:38px; height:38px; padding:0; justify-content:center; }
+      .rv-btn.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
+      .rv-btn.primary:hover { background:#1d4ed8; }
+      .rv-btn.primary.on { background:#16a34a; border-color:#16a34a; }
+      .rv-btn.danger  { background:#dc2626; color:#fff; border-color:#dc2626; }
+      .rv-btn.danger:hover { background:#b91c1c; }
+      .rv-btn.muted   { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
+      .room-tiles { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); flex:1; min-height:200px; }
+      .tile { position:relative; background:#0b0f17; border-radius:12px; overflow:hidden; aspect-ratio:16/9; box-shadow:0 4px 16px rgba(0,0,0,.12); }
+      .tile video { width:100%; height:100%; object-fit:cover; background:#000; }
+      .tile .tile-label { position:absolute; left:8px; bottom:8px; background:rgba(0,0,0,.55); color:#fff; padding:3px 8px; border-radius:6px; font-size:12px; }
+      .tile .tile-caption { position:absolute; left:8px; right:8px; bottom:36px; background:rgba(0,0,0,.6); color:#fff; padding:6px 10px; border-radius:6px; font-size:13px; line-height:1.3; max-height:40%; overflow:hidden; }
+      .tile.local::after { display:none; }
+      .room-captions { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:10px 14px; min-height:60px; max-height:140px; overflow:auto; }
+      .cap-empty { color:#9ca3af; font-size:13px; font-style:italic; }
+      .cap-line { padding:4px 0; font-size:14px; border-bottom:1px dashed #eee; }
+      .cap-line:last-child { border-bottom:0; }
+      .cap-source { color:#6b7280; font-size:12px; }
+      .cap-trans  { color:#111827; font-weight:500; }
+      .room-status { color:#6b7280; font-size:12px; min-height:18px; padding:0 6px; }
+    `;
+    document.head.appendChild(css);
+  }
+
+  function buildLayout(container, ctx) {
+    injectCss();
+    container.innerHTML = '';
+
+    const root = el('div', { class: 'room-view' });
+
+    // ── Topbar ─────────────────────────────────────────────────────────
+    const langSelect = el('select', { class: 'lang-select', id: 'myLangSel' });
+    LANGS.forEach(([code, name]) => {
+      const o = el('option', { value: code }, code.toUpperCase() + ' — ' + name);
+      if (code === ctx.myLang) o.selected = true;
+      langSelect.appendChild(o);
+    });
+
+    const topbar = el('div', { class: 'room-topbar' }, [
+      el('div', { class: 'room-title' }, [
+        el('i', { class: 'fa-solid fa-video' }),
+        el('span', null, 'Sala ' + (ctx.roomCode || ''))
+      ]),
+      el('div', { class: 'room-tools' }, [
+        el('label', { class: 'room-lang' }, [
+          el('i', { class: 'fa-solid fa-language' }),
+          el('span', null, ' Mi idioma '),
+          langSelect
+        ]),
+        el('button', { class: 'rv-btn icon', id: 'btnMic', title: 'Mute / unmute' }, [
+          el('i', { class: 'fa-solid fa-microphone' })
+        ]),
+        el('button', { class: 'rv-btn icon', id: 'btnCam', title: 'Camera on/off' }, [
+          el('i', { class: 'fa-solid fa-video' })
+        ]),
+        el('button', { class: 'rv-btn primary', id: 'btnInterp', title: 'Activar traductor en vivo' }, [
+          el('i', { class: 'fa-solid fa-language' }),
+          el('span', null, ' Traductor: OFF')
+        ]),
+        el('button', { class: 'rv-btn danger', id: 'btnLeave', title: 'Salir' }, [
+          el('i', { class: 'fa-solid fa-phone-slash' }),
+          el('span', null, ' Salir')
+        ])
+      ])
+    ]);
+
+    const tiles    = el('div', { class: 'room-tiles', id: 'tiles' });
+    const captions = el('div', { class: 'room-captions', id: 'captions' }, [
+      el('div', { class: 'cap-empty' }, 'Activa el traductor para ver subtítulos en vivo en tu idioma.')
+    ]);
+    const status   = el('div', { class: 'room-status', id: 'roomStatus' }, '');
+
+    root.appendChild(topbar);
+    root.appendChild(tiles);
+    root.appendChild(captions);
+    root.appendChild(status);
+    container.appendChild(root);
+
+    return {
+      tiles, captions, status,
+      myLangSel: langSelect,
+      btnMic:    root.querySelector('#btnMic'),
+      btnCam:    root.querySelector('#btnCam'),
+      btnInterp: root.querySelector('#btnInterp'),
+      btnLeave:  root.querySelector('#btnLeave')
+    };
+  }
+
+  function makeTile(label, isLocal) {
+    const wrap = el('div', { class: 'tile' + (isLocal ? ' local' : '') });
+    const video = el('video', { autoplay: true, playsinline: '' });
+    if (isLocal) video.muted = true;
+    const lbl = el('div', { class: 'tile-label' }, label + (isLocal ? ' (yo)' : ''));
+    const cap = el('div', { class: 'tile-caption' });
+    cap.style.display = 'none';
+    wrap.appendChild(video);
+    wrap.appendChild(cap);
+    wrap.appendChild(lbl);
+    return { wrap, video, cap, label };
   }
 
   async function render(container, params) {
-    var roomCode = (params.id || '').toUpperCase();
-    if (!roomCode) { window.Router.navigate('dashboard'); return; }
+    params = params || {};
+    const roomCode = String(
+      params.code || params.roomCode ||
+      ((location.hash.match(/room\/([^/?]+)/) || [])[1] || '')
+    ).trim().toLowerCase();
 
-    var user = window.Auth.getUser();
-    var socket = null;
-    var localStream = null;
-    var peers = {}; // socketId -> { pc, user, videoEl }
-    var audioOn = true;
-    var videoOn = true;
-    var ended = false;
-
-    // Default language prefs — try to seed from the user's profile if available
-    var sourceLang = (user && user.native_language) || localStorage.getItem('bl_source_lang') || 'es';
-    var targetLang = (user && user.learning_language) || localStorage.getItem('bl_target_lang') || 'en';
-
-    container.innerHTML =
-      '<div class="app-shell">' +
-        '<nav class="navbar-bl">' +
-          '<a href="#/dashboard" class="brand" style="text-decoration:none"><span class="parrot">🦜</span> BiLingo Meet</a>' +
-          '<div class="nav-links">' +
-            '<span class="nav-link"><i class="fa-solid fa-door-open"></i> Sala <strong style="color:var(--green); margin-left:6px">' + window.UI.escapeHtml(roomCode) + '</strong></span>' +
-          '</div>' +
-        '</nav>' +
-        '<main style="padding:16px; max-width:1400px; margin:0 auto; width:100%">' +
-          '<div class="room-layout">' +
-            '<div class="video-area">' +
-              '<div class="video-grid solo" id="video-grid">' +
-                '<div class="video-tile" id="local-tile">' +
-                  '<video id="local-video" autoplay muted playsinline></video>' +
-                  '<div class="tile-label"><i class="fa-solid fa-circle" style="color:var(--green); font-size:0.5rem"></i> Tú (' + window.UI.escapeHtml(user.display_name) + ')</div>' +
-                '</div>' +
-              '</div>' +
-              '<div class="room-controls">' +
-                '<button class="ctrl-btn" id="toggle-audio" title="Micrófono"><i class="fa-solid fa-microphone"></i></button>' +
-                '<button class="ctrl-btn" id="toggle-video" title="Cámara"><i class="fa-solid fa-video"></i></button>' +
-                '<button class="ctrl-btn leave" id="leave-btn"><i class="fa-solid fa-phone-slash"></i> Salir</button>' +
-              '</div>' +
-            '</div>' +
-            '<div class="sidebar-panel">' +
-              '<div class="sidebar-tabs">' +
-                '<button class="sidebar-tab active" data-tab="info"><i class="fa-solid fa-circle-info"></i> Sala</button>' +
-                '<button class="sidebar-tab" data-tab="chat"><i class="fa-solid fa-comments"></i> Chat</button>' +
-              '</div>' +
-              '<div class="sidebar-body">' +
-                '<div id="tab-info" class="room-info-panel">' +
-                  '<p class="muted" style="margin:0">Comparte este código con tu compañero:</p>' +
-                  '<div class="room-code-display">' + window.UI.escapeHtml(roomCode) + '</div>' +
-                  '<button class="btn-bl btn-blue btn-sm" id="copy-link" style="width:100%"><i class="fa-solid fa-copy"></i> Copiar enlace</button>' +
-                  '<div style="margin-top:18px"><div style="font-weight:800; margin-bottom:6px">Participantes</div><div id="participants-list" class="muted">Cargando…</div></div>' +
-                '</div>' +
-                '<div id="tab-chat" style="display:none; flex-direction:column; flex:1; overflow:hidden">' +
-                  '<div class="lang-bar">' +
-                    '<div class="lang-bar-group">' +
-                      '<label><i class="fa-solid fa-keyboard"></i> Hablo en</label>' +
-                      '<select id="src-lang">' + langOptions(sourceLang) + '</select>' +
-                    '</div>' +
-                    '<i class="fa-solid fa-arrow-right lang-arrow"></i>' +
-                    '<div class="lang-bar-group">' +
-                      '<label><i class="fa-solid fa-language"></i> Quiero ver</label>' +
-                      '<select id="tgt-lang">' + langOptions(targetLang) + '</select>' +
-                    '</div>' +
-                  '</div>' +
-                  '<div class="chat-messages" id="chat-messages"></div>' +
-                  '<form class="chat-input-bar" id="chat-form">' +
-                    '<input type="text" id="chat-input" placeholder="Escribe en tu idioma…" maxlength="2000" autocomplete="off">' +
-                    '<button type="submit" class="btn-bl btn-green btn-sm"><i class="fa-solid fa-paper-plane"></i></button>' +
-                  '</form>' +
-                '</div>' +
-              '</div>' +
-            '</div>' +
-          '</div>' +
-        '</main>' +
-      '</div>';
-
-    var grid = container.querySelector('#video-grid');
-    var localVideo = container.querySelector('#local-video');
-    var participantsList = container.querySelector('#participants-list');
-    var chatMessages = container.querySelector('#chat-messages');
-    var chatForm = container.querySelector('#chat-form');
-    var chatInput = container.querySelector('#chat-input');
-    var srcSelect = container.querySelector('#src-lang');
-    var tgtSelect = container.querySelector('#tgt-lang');
-
-    // Tabs
-    container.querySelectorAll('.sidebar-tab').forEach(function (t) {
-      t.addEventListener('click', function () {
-        container.querySelectorAll('.sidebar-tab').forEach(function (x) { x.classList.remove('active'); });
-        t.classList.add('active');
-        var which = t.dataset.tab;
-        container.querySelector('#tab-info').style.display = which === 'info' ? '' : 'none';
-        container.querySelector('#tab-chat').style.display = which === 'chat' ? 'flex' : 'none';
-      });
-    });
-
-    // Language selectors
-    srcSelect.addEventListener('change', function () {
-      sourceLang = srcSelect.value;
-      localStorage.setItem('bl_source_lang', sourceLang);
-      if (socket) socket.emit('lang:update', { sourceLang: sourceLang, targetLang: targetLang });
-      window.UI.notify('Escribirás en ' + langLabel(sourceLang), 'info');
-    });
-    tgtSelect.addEventListener('change', function () {
-      targetLang = tgtSelect.value;
-      localStorage.setItem('bl_target_lang', targetLang);
-      if (socket) socket.emit('lang:update', { sourceLang: sourceLang, targetLang: targetLang });
-      window.UI.notify('Verás traducciones en ' + langLabel(targetLang), 'info');
-    });
-
-    // Copy link
-    container.querySelector('#copy-link').addEventListener('click', function () {
-      var link = window.location.origin + window.location.pathname + '#/room/' + roomCode;
-      navigator.clipboard.writeText(link).then(function () {
-        window.UI.notify('Enlace copiado al portapapeles', 'success');
-      }).catch(function () {
-        window.UI.notify('No se pudo copiar', 'error');
-      });
-    });
-
-    // Get user media
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localVideo.srcObject = localStream;
-    } catch (err) {
-      window.UI.notify('No se pudo acceder a la cámara/micrófono: ' + err.message, 'error');
-      localStream = new MediaStream();
-    }
-
-    // Join room via API first
-    try {
-      await window.API.post('api/rooms/' + roomCode + '/join', {});
-    } catch (err) {
-      window.UI.notify(err.message || 'No se pudo unir a la sala', 'error');
-      setTimeout(function () { window.Router.navigate('dashboard'); }, 1500);
+    if (!roomCode) {
+      container.innerHTML = '<div class="alert alert-warning m-4">No se proporcionó código de sala.</div>';
       return;
     }
 
-    // Load chat history
+    const user = (window.AuthSession && window.AuthSession.getUser && window.AuthSession.getUser()) ||
+                 (window.App && window.App.user) ||
+                 (window.Auth && window.Auth.user) ||
+                 {};
+    const ctx  = { roomCode, user, myLang: getMyLang(user) };
+    const ui   = buildLayout(container, ctx);
+
+    // ── Local media ────────────────────────────────────────────────────
+    let localStream = null;
     try {
-      var roomData = await window.API.get('api/rooms/' + roomCode);
-      var msgs = await window.API.get('api/rooms/' + roomData.id + '/messages');
-      msgs.forEach(addChatMessage);
-    } catch (e) { /* ignore */ }
-
-    // Connect socket
-    var basePath = (document.querySelector('base') && document.querySelector('base').getAttribute('href')) || '/';
-    if (!basePath.endsWith('/')) basePath += '/';
-    socket = io({
-      path: basePath + 'socket.io',
-      transports: ['polling'],
-      upgrade: false
-    });
-
-    socket.on('connect', function () {
-      socket.emit('room:join', { roomCode: roomCode, sourceLang: sourceLang, targetLang: targetLang });
-    });
-
-    socket.on('room:error', function (data) {
-      window.UI.notify(data.message || 'Error de sala', 'error');
-    });
-
-    socket.on('room:joined', function (data) {
-      updateParticipants();
-      data.peers.forEach(function (peer) { createPeer(peer, true); });
-    });
-
-    socket.on('peer:joined', function (peer) {
-      createPeer({ socketId: peer.socketId, userId: peer.userId, displayName: peer.displayName, avatarColor: peer.avatarColor, sourceLang: peer.sourceLang, targetLang: peer.targetLang }, false);
-      window.UI.notify(peer.displayName + ' se ha unido 👋', 'info');
-    });
-
-    socket.on('peer:left', function (data) {
-      removePeer(data.socketId);
-    });
-
-    socket.on('peer:lang', function (data) {
-      var peer = peers[data.socketId];
-      if (peer) {
-        peer.user.sourceLang = data.sourceLang;
-        peer.user.targetLang = data.targetLang;
-        updateParticipants();
-      }
-    });
-
-    socket.on('webrtc:offer', async function (data) {
-      var peer = peers[data.from];
-      if (!peer) {
-        peer = createPeer({ socketId: data.from, userId: data.user.id, displayName: data.user.displayName, avatarColor: data.user.avatarColor }, false);
-      }
-      try {
-        await peer.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        var answer = await peer.pc.createAnswer();
-        await peer.pc.setLocalDescription(answer);
-        socket.emit('webrtc:answer', { to: data.from, sdp: answer });
-      } catch (err) { console.error('offer handle err', err); }
-    });
-
-    socket.on('webrtc:answer', async function (data) {
-      var peer = peers[data.from];
-      if (!peer) return;
-      try { await peer.pc.setRemoteDescription(new RTCSessionDescription(data.sdp)); } catch (e) { console.error(e); }
-    });
-
-    socket.on('webrtc:ice', async function (data) {
-      var peer = peers[data.from];
-      if (!peer || !data.candidate) return;
-      try { await peer.pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch (e) { /* ignore */ }
-    });
-
-    socket.on('chat:message', function (msg) {
-      addChatMessage(msg);
-    });
-
-    // Caption overlay on the speaker's tile (per the in_meeting_room design).
-    // Renders original (small) + translated (main) inside a fade-out bubble.
-    socket.on('caption', function (cap) {
-      try {
-        var speakerSid = cap.speakerSocketId;
-        var isSelf = cap.isSelf || (speakerSid === socket.id);
-        var tile = isSelf ? document.getElementById('local-tile')
-                          : document.getElementById('tile-' + speakerSid);
-        if (!tile) return;
-        var bubble = tile.querySelector('.caption-bubble');
-        if (!bubble) {
-          bubble = document.createElement('div');
-          bubble.className = 'caption-bubble';
-          bubble.style.cssText = 'position:absolute;left:8px;right:8px;bottom:32px;background:rgba(15,23,42,.78);color:#F8FAFC;border-radius:10px;padding:8px 12px;font-size:0.85rem;line-height:1.35;backdrop-filter:blur(8px);pointer-events:none;z-index:5';
-          tile.style.position = 'relative';
-          tile.appendChild(bubble);
-        }
-        var origHtml = '<div style="font-size:0.72rem;color:#94A3B8;margin-bottom:2px"><span class="lang-tag">' + window.UI.escapeHtml(cap.originalLanguage || '') + '</span> ' + window.UI.escapeHtml(cap.originalText || '') + '</div>';
-        var translatedHtml = '';
-        if (!isSelf && cap.translatedText && cap.translatedText !== cap.originalText) {
-          translatedHtml = '<div style="font-weight:600">' + window.UI.escapeHtml(cap.translatedText) + '</div>';
-        }
-        var degraded = cap.isDegraded
-          ? '<div style="margin-top:4px;font-size:0.65rem;color:#FCD34D"><i class="fa-solid fa-triangle-exclamation"></i> Traducción degradada</div>'
-          : '';
-        bubble.innerHTML = origHtml + translatedHtml + degraded;
-        // Auto-hide after a short window so captions don't pile up.
-        if (bubble._timer) clearTimeout(bubble._timer);
-        bubble.style.opacity = '1';
-        bubble._timer = setTimeout(function () {
-          bubble.style.transition = 'opacity 0.4s';
-          bubble.style.opacity = '0';
-        }, 4500);
-      } catch (e) { /* swallow render errors */ }
-    });
-
-    // Speaker echo — confirms our utterance was transcribed.
-    socket.on('speak:transcribed', function (info) {
-      console.log('[caption] transcribed', info.segmentId, '→', info.listenerCount, 'listeners');
-    });
-
-    function createPeer(info, initiator) {
-      if (peers[info.socketId]) return peers[info.socketId];
-      var pc = new RTCPeerConnection(ICE_CONFIG);
-      var peer = { pc: pc, user: info, videoEl: null };
-      peers[info.socketId] = peer;
-
-      if (localStream) {
-        localStream.getTracks().forEach(function (t) { pc.addTrack(t, localStream); });
-      }
-
-      pc.onicecandidate = function (e) {
-        if (e.candidate) socket.emit('webrtc:ice', { to: info.socketId, candidate: e.candidate });
-      };
-
-      pc.ontrack = function (e) {
-        attachRemoteStream(info, e.streams[0]);
-      };
-
-      pc.onconnectionstatechange = function () {
-        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-          removePeer(info.socketId);
-        }
-      };
-
-      if (initiator) {
-        pc.createOffer().then(function (offer) {
-          return pc.setLocalDescription(offer).then(function () {
-            socket.emit('webrtc:offer', { to: info.socketId, sdp: offer });
-          });
-        }).catch(function (err) { console.error('offer err', err); });
-      }
-
-      addPeerTile(info);
-      updateParticipants();
-      return peer;
-    }
-
-    function addPeerTile(info) {
-      if (document.getElementById('tile-' + info.socketId)) return;
-      var tile = document.createElement('div');
-      tile.className = 'video-tile';
-      tile.id = 'tile-' + info.socketId;
-      tile.innerHTML =
-        '<video autoplay playsinline></video>' +
-        '<div class="tile-label"><i class="fa-solid fa-circle" style="color:' + info.avatarColor + '; font-size:0.5rem"></i> ' + window.UI.escapeHtml(info.displayName) + '</div>';
-      grid.appendChild(tile);
-      grid.classList.remove('solo');
-      peers[info.socketId].videoEl = tile.querySelector('video');
-    }
-
-    function attachRemoteStream(info, stream) {
-      var peer = peers[info.socketId];
-      if (peer && peer.videoEl) peer.videoEl.srcObject = stream;
-    }
-
-    function removePeer(socketId) {
-      var peer = peers[socketId];
-      if (!peer) return;
-      try { peer.pc.close(); } catch (e) {}
-      delete peers[socketId];
-      var tile = document.getElementById('tile-' + socketId);
-      if (tile) tile.remove();
-      if (Object.keys(peers).length === 0) grid.classList.add('solo');
-      updateParticipants();
-    }
-
-    function updateParticipants() {
-      var items = [
-        '<div style="display:flex; align-items:center; gap:8px; padding:6px 0">' +
-          window.UI.avatar(user.display_name, user.avatar_color, 'sm') +
-          '<div>' +
-            '<div style="font-weight:800; font-size:0.9rem">' + window.UI.escapeHtml(user.display_name) + ' (tú)</div>' +
-            '<div class="muted" style="font-size:0.75rem">' + langLabel(sourceLang) + ' <i class="fa-solid fa-arrow-right" style="font-size:0.65rem"></i> ' + langLabel(targetLang) + '</div>' +
-          '</div>' +
-        '</div>'
-      ];
-      Object.keys(peers).forEach(function (sid) {
-        var p = peers[sid].user;
-        var langInfo = '';
-        if (p.sourceLang) {
-          langInfo = '<div class="muted" style="font-size:0.75rem">' + langLabel(p.sourceLang) + (p.targetLang ? ' <i class="fa-solid fa-arrow-right" style="font-size:0.65rem"></i> ' + langLabel(p.targetLang) : '') + '</div>';
-        }
-        items.push('<div style="display:flex; align-items:center; gap:8px; padding:6px 0">' +
-          window.UI.avatar(p.displayName, p.avatarColor, 'sm') +
-          '<div>' +
-            '<div style="font-weight:800; font-size:0.9rem">' + window.UI.escapeHtml(p.displayName) + '</div>' +
-            langInfo +
-          '</div>' +
-        '</div>');
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+        video: { width: 1280, height: 720 }
       });
-      participantsList.innerHTML = items.join('');
+    } catch (e) {
+      ui.status.textContent = 'No se pudo acceder a cámara: ' + (e.message || e) + ' — intentando solo audio…';
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e2) {
+        ui.status.textContent = 'Sin permiso de micrófono/cámara. ' + (e2.message || e2);
+        return;
+      }
     }
 
-    function addChatMessage(msg) {
-      var own = msg.user_id === user.id;
-      var el = document.createElement('div');
-      el.className = 'chat-msg' + (own ? ' own' : '');
+    const meTile = makeTile(user.display_name || user.name || 'Yo', true);
+    meTile.video.srcObject = localStream;
+    ui.tiles.appendChild(meTile.wrap);
 
-      var bubbleHtml = '';
-      if (!own) {
-        bubbleHtml += '<div class="sender" style="color:' + (msg.avatar_color || '#58CC02') + '">' + window.UI.escapeHtml(msg.display_name) + '</div>';
+    // ── Peers map keyed by socketId ────────────────────────────────────
+    /** @type {Map<string, {pc:RTCPeerConnection, tile:any, label:string, stream:MediaStream, userId:number, sourceLang:string}>} */
+    const peers = new Map();
+    let interpreter = null;
+    let socket = null;
+    let userToggledInterp = false; // tracks if user explicitly turned it ON
+
+    function normLang(code) {
+      return String(code || '').toLowerCase().split('-')[0];
+    }
+
+    // Returns true if at least one peer in the room speaks a different
+    // language than mine. If everyone speaks my language, we don't need
+    // the OpenAI Realtime translator and we just listen to the original
+    // P2P audio (cheaper, lower latency, no quotas).
+    function someoneNeedsTranslation() {
+      const me = normLang(ctx.myLang);
+      for (const p of peers.values()) {
+        if (p.sourceLang && normLang(p.sourceLang) !== me) return true;
       }
+      return false;
+    }
 
-      // Decide what to show:
-      // - If we have a translation different from the original, show original (small) + translation (main)
-      // - Otherwise just show the original
-      var original = msg.content || '';
-      var translated = msg.translated_content;
-      var srcL = msg.source_lang;
-      var tgtL = msg.target_lang;
+    function pipeAudioToInterpreter(peerEntry, peerSocketId) {
+      if (!interpreter || interpreter.state !== 'live') return;
+      // Only route through the interpreter when this peer speaks a
+      // DIFFERENT language than mine. Same-language peers keep their
+      // original audio (we don't mute their tile, we don't feed them
+      // to OpenAI).
+      const me = normLang(ctx.myLang);
+      const them = normLang(peerEntry.sourceLang);
+      if (them && them === me) {
+        try { peerEntry.tile.video.muted = false; } catch (_) {}
+        try { interpreter.removePeerAudio(peerSocketId); } catch (_) {}
+        return;
+      }
+      try { peerEntry.tile.video.muted = true; } catch (_) {}
+      try { interpreter.addPeerAudio(peerEntry.stream, peerSocketId); } catch (_) {}
+    }
 
-      if (!own && translated && translated !== original) {
-        bubbleHtml +=
-          '<div class="msg-translated">' + window.UI.escapeHtml(translated) + '</div>' +
-          '<div class="msg-original">' +
-            '<span class="lang-tag">' + window.UI.escapeHtml(srcL || '') + '</span> ' +
-            window.UI.escapeHtml(original) +
-          '</div>';
-      } else {
-        bubbleHtml += '<div>' + window.UI.escapeHtml(original) + '</div>';
-        if (!own && srcL && srcL !== sourceLang && !translated) {
-          bubbleHtml += '<div class="msg-original" style="opacity:0.6"><span class="lang-tag">' + window.UI.escapeHtml(srcL) + '</span> (sin traducir)</div>';
+    // Re-evaluate auto-routing whenever peers or languages change.
+    function refreshInterpreterRouting() {
+      if (!interpreter) return;
+      if (interpreter.state !== 'live') return;
+      peers.forEach((p, id) => pipeAudioToInterpreter(p, id));
+      // If nobody in the room speaks a different language anymore and
+      // the user didn't explicitly turn it on, shut it down to save tokens.
+      if (!someoneNeedsTranslation() && !userToggledInterp) {
+        stopInterpreter();
+      }
+    }
+
+    function createPeer(peerSocketId, label, userId, sourceLang) {
+      const tile = makeTile(label || ('Peer ' + peerSocketId.slice(0, 4)), false);
+      ui.tiles.appendChild(tile.wrap);
+      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+      const remoteStream = new MediaStream();
+      tile.video.srcObject = remoteStream;
+      pc.ontrack = (ev) => {
+        if (ev.streams && ev.streams[0]) {
+          ev.streams[0].getTracks().forEach(t => {
+            if (!remoteStream.getTracks().includes(t)) remoteStream.addTrack(t);
+          });
+        } else if (ev.track) {
+          remoteStream.addTrack(ev.track);
+        }
+        // Pipe audio to interpreter if active
+        const entry = peers.get(peerSocketId);
+        if (entry) pipeAudioToInterpreter(entry, peerSocketId);
+      };
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate && socket) {
+          socket.emit('webrtc:ice', { to: peerSocketId, candidate: ev.candidate });
+        }
+      };
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          // Will be cleaned up by peer:left or our own removePeer
+        }
+      };
+      const entry = {
+        pc, tile,
+        label: label || peerSocketId.slice(0, 6),
+        stream: remoteStream,
+        userId,
+        sourceLang: normLang(sourceLang) || ''
+      };
+      peers.set(peerSocketId, entry);
+      return entry;
+    }
+
+    function removePeer(peerSocketId) {
+      const p = peers.get(peerSocketId);
+      if (!p) return;
+      try { p.pc.close(); } catch (_) {}
+      if (p.tile.wrap.parentNode) p.tile.wrap.parentNode.removeChild(p.tile.wrap);
+      if (interpreter) {
+        try { interpreter.removePeerAudio(peerSocketId); } catch (_) {}
+      }
+      peers.delete(peerSocketId);
+    }
+
+    // ── Socket.IO signaling ────────────────────────────────────────────
+    if (typeof io !== 'function') {
+      ui.status.textContent = 'Socket.IO no cargado.';
+      return;
+    }
+    const base = getBase();
+    const ioPath = (base.endsWith('/') ? base.slice(0, -1) : base) + '/socket.io';
+    const token = (function () { try { return localStorage.getItem('token'); } catch (_) { return null; } })();
+
+    // The PUBLIC proxy (/project-<u>/<p>/) does NOT support the
+    // HTTP→WebSocket upgrade for socket.io: handshake works on polling,
+    // but the WS upgrade is refused and the next long-poll returns 502.
+    // Detect that case and stay on long-polling. Inside /run/<id>/ the
+    // upgrade works fine, so we keep websocket as an upgrade target.
+    const isPublicProxy = /^\/project-/.test(base);
+    const ioTransports = isPublicProxy ? ['polling'] : ['polling', 'websocket'];
+    const ioUpgrade = !isPublicProxy;
+
+    socket = io({
+      path: ioPath,
+      transports: ioTransports,
+      upgrade: ioUpgrade,
+      auth: token ? { token } : undefined,
+      query: token ? { token } : undefined
+    });
+
+    socket.on('connect', () => {
+      ui.status.textContent = 'Conectado. Entrando a la sala…';
+      socket.emit('room:join', {
+        roomCode: ctx.roomCode,
+        sourceLang: ctx.myLang,
+        targetLang: ctx.myLang
+      });
+    });
+
+    socket.on('disconnect', () => { ui.status.textContent = 'Desconectado del servidor.'; });
+    socket.on('connect_error', (err) => {
+      ui.status.textContent = 'Error de conexión: ' + (err && err.message || err);
+    });
+    socket.on('room:error', (err) => {
+      ui.status.textContent = 'Error de sala: ' + (err && err.message || 'desconocido');
+    });
+
+    // I joined → server sends list of peers already in the room.
+    // I create offers to each of them (avoids glare: late joiner always offers).
+    socket.on('room:joined', async ({ room, peers: existing }) => {
+      ui.status.textContent = 'En la sala. ' + (existing.length === 0
+        ? 'Esperando participantes…'
+        : (existing.length + ' participante(s) en línea.'));
+      for (const p of (existing || [])) {
+        const peer = createPeer(
+          p.socketId,
+          p.displayName || ('Peer'),
+          p.userId,
+          p.sourceLang || p.targetLang
+        );
+        try {
+          const offer = await peer.pc.createOffer();
+          await peer.pc.setLocalDescription(offer);
+          socket.emit('webrtc:offer', { to: p.socketId, sdp: offer });
+        } catch (e) {
+          ui.status.textContent = 'Error al crear oferta: ' + (e.message || e);
         }
       }
-
-      el.innerHTML =
-        (!own ? window.UI.avatar(msg.display_name, msg.avatar_color, 'sm') : '') +
-        '<div class="chat-msg-bubble">' + bubbleHtml + '</div>';
-      chatMessages.appendChild(el);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    chatForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var content = chatInput.value.trim();
-      if (!content) return;
-      socket.emit('chat:send', { content: content, sourceLang: sourceLang, targetLang: targetLang });
-      chatInput.value = '';
+      refreshInterpreterRouting();
     });
 
-    container.querySelector('#toggle-audio').addEventListener('click', function () {
-      audioOn = !audioOn;
-      localStream.getAudioTracks().forEach(function (t) { t.enabled = audioOn; });
-      this.classList.toggle('off', !audioOn);
-      this.innerHTML = '<i class="fa-solid ' + (audioOn ? 'fa-microphone' : 'fa-microphone-slash') + '"></i>';
-      socket.emit('media:state', { audio: audioOn, video: videoOn });
+    // New peer joined AFTER me → they will send the offer to me.
+    socket.on('peer:joined', (p) => {
+      ui.status.textContent = (p.displayName || 'Alguien') + ' se unió.';
+      // Don't pre-create the peer here; we'll create it on webrtc:offer.
+      // But we can pre-create to show the tile sooner — let's NOT,
+      // because we don't know yet if they'll connect.
     });
 
-    container.querySelector('#toggle-video').addEventListener('click', function () {
-      videoOn = !videoOn;
-      localStream.getVideoTracks().forEach(function (t) { t.enabled = videoOn; });
-      this.classList.toggle('off', !videoOn);
-      this.innerHTML = '<i class="fa-solid ' + (videoOn ? 'fa-video' : 'fa-video-slash') + '"></i>';
-      socket.emit('media:state', { audio: audioOn, video: videoOn });
+    socket.on('peer:left', ({ socketId }) => {
+      removePeer(socketId);
+      ui.status.textContent = 'Un participante salió.';
     });
 
-    async function leaveRoom() {
-      if (ended) return;
-      ended = true;
+    socket.on('peer:lang', ({ socketId, sourceLang, targetLang }) => {
+      const p = peers.get(socketId);
+      if (!p) return;
+      p.sourceLang = normLang(sourceLang || targetLang) || p.sourceLang;
+      refreshInterpreterRouting();
+    });
+
+    // WebRTC signaling
+    socket.on('webrtc:offer', async ({ from, sdp, user: peerUser }) => {
+      let entry = peers.get(from);
+      if (!entry) {
+        entry = createPeer(
+          from,
+          (peerUser && peerUser.displayName) || 'Peer',
+          peerUser && peerUser.id,
+          peerUser && (peerUser.sourceLang || peerUser.targetLang)
+        );
+      }
       try {
-        var roomData = await window.API.get('api/rooms/' + roomCode);
-        if (roomData) await window.API.post('api/rooms/' + roomData.id + '/end', {});
-      } catch (e) {}
-      cleanup();
-      window.Router.navigate('dashboard');
+        await entry.pc.setRemoteDescription(sdp);
+        const answer = await entry.pc.createAnswer();
+        await entry.pc.setLocalDescription(answer);
+        socket.emit('webrtc:answer', { to: from, sdp: answer });
+      } catch (e) {
+        ui.status.textContent = 'Error procesando oferta: ' + (e.message || e);
+      }
+    });
+
+    socket.on('webrtc:answer', async ({ from, sdp }) => {
+      const entry = peers.get(from);
+      if (!entry) return;
+      try { await entry.pc.setRemoteDescription(sdp); }
+      catch (e) { ui.status.textContent = 'Error procesando respuesta: ' + (e.message || e); }
+    });
+
+    socket.on('webrtc:ice', async ({ from, candidate }) => {
+      const entry = peers.get(from);
+      if (!entry || !candidate) return;
+      try { await entry.pc.addIceCandidate(candidate); } catch (_) {}
+    });
+
+    socket.on('media:state', () => { /* could toggle mute icons */ });
+
+    // ── Captions ───────────────────────────────────────────────────────
+    function appendCaption({ kind, text, final }) {
+      const stripEmpty = ui.captions.querySelector('.cap-empty');
+      if (stripEmpty) stripEmpty.remove();
+      const cls = kind === 'translation' ? 'cap-trans' : 'cap-source';
+      let live = ui.captions.querySelector('.cap-line[data-live="' + cls + '"]');
+      if (!live) {
+        live = el('div', { class: 'cap-line', 'data-live': cls }, [
+          el('span', { class: cls }, text)
+        ]);
+        ui.captions.appendChild(live);
+      } else {
+        live.querySelector('span').textContent = text;
+      }
+      if (final) live.removeAttribute('data-live');
+      ui.captions.scrollTop = ui.captions.scrollHeight;
+
+      // Mirror translation into a generic "everyone speaks" caption on all peer tiles
+      if (kind === 'translation') {
+        peers.forEach((p) => {
+          p.tile.cap.style.display = 'block';
+          p.tile.cap.textContent = text;
+          if (final) {
+            setTimeout(() => {
+              if (p.tile.cap.textContent === text) p.tile.cap.style.display = 'none';
+            }, 4000);
+          }
+        });
+      }
     }
 
-    container.querySelector('#leave-btn').addEventListener('click', leaveRoom);
-
-    function cleanup() {
-      Object.keys(peers).forEach(function (sid) { try { peers[sid].pc.close(); } catch (e) {} });
-      peers = {};
-      if (localStream) { localStream.getTracks().forEach(function (t) { t.stop(); }); }
-      if (socket) { try { socket.disconnect(); } catch (e) {} }
+    // ── Interpreter (OpenAI Realtime) ──────────────────────────────────
+    async function startInterpreter() {
+      if (interpreter && (interpreter.state === 'live' || interpreter.state === 'connecting')) return;
+      if (typeof RealtimeInterpreter !== 'function') {
+        ui.status.textContent = 'Cliente Realtime no cargado.';
+        return;
+      }
+      ui.btnInterp.disabled = true;
+      ui.btnInterp.querySelector('span').textContent = ' Conectando…';
+      try {
+        interpreter = new RealtimeInterpreter({
+          basePath: base,
+          nativeLang: ctx.myLang,
+          onCaption: appendCaption,
+          onStatus: (s) => {
+            ui.status.textContent = 'Traductor: ' + s;
+            if (s === 'live') {
+              ui.btnInterp.classList.add('on');
+              ui.btnInterp.querySelector('span').textContent = ' Traductor: ON';
+              ui.btnInterp.disabled = false;
+              peers.forEach((p, id) => pipeAudioToInterpreter(p, id));
+            } else if (s === 'closed' || s === 'error') {
+              ui.btnInterp.classList.remove('on');
+              ui.btnInterp.querySelector('span').textContent = ' Traductor: OFF';
+              ui.btnInterp.disabled = false;
+              peers.forEach((p) => { try { p.tile.video.muted = false; } catch (_) {} });
+            }
+          },
+          onError: (err) => {
+            ui.status.textContent = 'Error del traductor: ' + (err.message || err);
+            console.error('[interpreter]', err);
+          }
+        });
+        await interpreter.start();
+      } catch (err) {
+        ui.btnInterp.disabled = false;
+        ui.btnInterp.classList.remove('on');
+        ui.btnInterp.querySelector('span').textContent = ' Traductor: OFF';
+        ui.status.textContent = 'No se pudo activar el traductor: ' + (err.message || err);
+      }
     }
 
-    return cleanup;
+    function stopInterpreter() {
+      if (interpreter) {
+        try { interpreter.stop(); } catch (_) {}
+        interpreter = null;
+      }
+      peers.forEach((p) => { try { p.tile.video.muted = false; } catch (_) {} });
+      ui.btnInterp.classList.remove('on');
+      ui.btnInterp.querySelector('span').textContent = ' Traductor: OFF';
+    }
+
+    ui.btnInterp.addEventListener('click', () => {
+      if (interpreter && interpreter.state === 'live') {
+        userToggledInterp = false;
+        stopInterpreter();
+      } else {
+        userToggledInterp = true;
+        if (!someoneNeedsTranslation()) {
+          ui.status.textContent = 'Todos hablan tu idioma — no se necesita traducción. Activando igualmente…';
+        }
+        startInterpreter();
+      }
+    });
+
+    // ── Mic / Cam toggles ──────────────────────────────────────────────
+    ui.btnMic.addEventListener('click', () => {
+      const tracks = localStream.getAudioTracks();
+      const newState = !(tracks[0] && tracks[0].enabled);
+      tracks.forEach(t => (t.enabled = newState));
+      ui.btnMic.classList.toggle('muted', !newState);
+      ui.btnMic.querySelector('i').className = newState ? 'fa-solid fa-microphone' : 'fa-solid fa-microphone-slash';
+      if (socket) socket.emit('media:state', { muted: !newState });
+    });
+    ui.btnCam.addEventListener('click', () => {
+      const tracks = localStream.getVideoTracks();
+      const newState = !(tracks[0] && tracks[0].enabled);
+      tracks.forEach(t => (t.enabled = newState));
+      ui.btnCam.classList.toggle('muted', !newState);
+      ui.btnCam.querySelector('i').className = newState ? 'fa-solid fa-video' : 'fa-solid fa-video-slash';
+      if (socket) socket.emit('media:state', { videoOff: !newState });
+    });
+
+    // ── Language change ────────────────────────────────────────────────
+    ui.myLangSel.addEventListener('change', async () => {
+      ctx.myLang = ui.myLangSel.value;
+      setMyLang(ctx.myLang);
+      if (socket) socket.emit('lang:update', { sourceLang: ctx.myLang, targetLang: ctx.myLang });
+      if (interpreter && interpreter.state === 'live') {
+        stopInterpreter();
+        if (someoneNeedsTranslation() || userToggledInterp) {
+          await startInterpreter();
+        }
+      } else {
+        // Re-evaluate muting on existing peer tiles for the new lang
+        peers.forEach((p) => {
+          const me = normLang(ctx.myLang);
+          const them = normLang(p.sourceLang);
+          try { p.tile.video.muted = (them && them !== me && interpreter && interpreter.state === 'live'); } catch (_) {}
+        });
+      }
+    });
+
+    // ── Leave ──────────────────────────────────────────────────────────
+    let leaving = false;
+    function leave() {
+      if (leaving) return;
+      leaving = true;
+      try { if (socket) socket.emit('room:leave'); } catch (_) {}
+      try { if (socket) socket.disconnect(); } catch (_) {}
+      try { stopInterpreter(); } catch (_) {}
+      try { localStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+      Array.from(peers.keys()).forEach(id => removePeer(id));
+      if (window.Router && typeof window.Router.go === 'function') window.Router.go('dashboard');
+      else if (window.Router && typeof window.Router.navigate === 'function') window.Router.navigate('dashboard');
+      else window.location.hash = 'dashboard';
+    }
+    ui.btnLeave.addEventListener('click', leave);
+    window.addEventListener('beforeunload', leave);
+
+    ui.status.textContent = 'Conectando al servidor…';
   }
 
-  window.Router.register('room', render);
+  window.Views = window.Views || {};
+  window.Views.room = { render };
+  window.RoomView = { render };
+
+  // Register with the SPA router so navigating to #/room/<code> renders this view.
+  // The router passes the second hash segment as params.id.
+  if (window.Router && typeof window.Router.register === 'function') {
+    window.Router.register('room', function (container, params) {
+      params = params || {};
+      // Map router's `id` param to what render() expects.
+      if (params.id && !params.code) params.code = params.id;
+      return render(container, params);
+    });
+  }
 })();

@@ -355,6 +355,10 @@
       <i class="fa-solid fa-hand"></i>
       <span class="bm-ctrl-label">Levantar mano</span>
     </button>
+    <button class="bm-ctrl" id="bm-btn-translate" title="Traductor en vivo (OpenAI Realtime)">
+      <i class="fa-solid fa-language"></i>
+      <span class="bm-ctrl-label">Traductor</span>
+    </button>
     <button class="bm-ctrl active" id="bm-btn-cap" title="Subtítulos">
       <i class="fa-solid fa-closed-captioning"></i>
       <span class="bm-ctrl-label">Subtítulos</span>
@@ -421,6 +425,7 @@
   </aside>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="js/realtime.js?v=7"></script>
   <script>
   (function() {
     'use strict';
@@ -584,11 +589,91 @@
     btnCap.addEventListener('click', function(){
       captionsOn = !captionsOn;
       setCtrlActive(btnCap, captionsOn);
-      document.querySelectorAll('.bm-tile-caption').forEach(function(c){
-        c.classList.toggle('show', captionsOn);
-      });
+      if (!captionsOn) {
+        document.querySelectorAll('.bm-tile-caption').forEach(function(c){
+          c.classList.remove('show');
+        });
+      }
     });
     if (captionsOn) setCtrlActive(btnCap, true);
+
+    // ----- OpenAI Realtime translator -----
+    // One Realtime session per local user. The session translates EVERY
+    // utterance the local mic picks up into the user's native language and
+    // plays it through an invisible <audio> sink (the user hears themselves
+    // in their own language — used here mainly as the source for captions).
+    //
+    // For peer-to-peer audio swap (the OTHER participant hears the
+    // translation) we'd swap the local mic track for `rt.translatedTrack`
+    // on the existing WebRTC peer connection. That hook is left here for
+    // when WebRTC peer connections are wired up.
+    var btnTranslate = $('#bm-btn-translate');
+    var realtime = null;
+    var translateState = 'idle';
+
+    function setTranslateBtn(state) {
+      translateState = state;
+      var icon = 'fa-language';
+      if (state === 'connecting') icon = 'fa-circle-notch fa-spin';
+      else if (state === 'live')  icon = 'fa-language';
+      else if (state === 'error') icon = 'fa-triangle-exclamation';
+      btnTranslate.innerHTML = '<i class="fa-solid ' + icon + '"></i><span class="bm-ctrl-label">Traductor</span>';
+      btnTranslate.classList.toggle('active', state === 'live' || state === 'connecting');
+    }
+
+    btnTranslate.addEventListener('click', async function() {
+      if (translateState === 'live' || translateState === 'connecting') {
+        if (realtime) { try { realtime.stop(); } catch(_){} }
+        realtime = null;
+        setTranslateBtn('idle');
+        addSystemChat('Traductor en vivo desactivado');
+        return;
+      }
+      if (!window.BiLingoRealtime) {
+        addSystemChat('Traductor no disponible (módulo no cargado)');
+        return;
+      }
+      try {
+        setTranslateBtn('connecting');
+        addSystemChat('Activando traductor en vivo…');
+        realtime = window.BiLingoRealtime.create({
+          apiBase: '',
+          socket: socket,
+          nativeLang: SELF.nativeLang,
+          onStatus: function(s) {
+            if (s === 'live') {
+              setTranslateBtn('live');
+              addSystemChat('Traductor activo — el audio se traduce en tiempo real a ' + (SELF.nativeLang || 'tu idioma'));
+            } else if (s === 'error') {
+              setTranslateBtn('error');
+            } else if (s === 'idle') {
+              setTranslateBtn('idle');
+            }
+          },
+          onError: function(err) {
+            console.warn('[realtime] error', err);
+            addSystemChat('Error en traductor: ' + (err && err.message || 'desconocido'));
+            setTranslateBtn('error');
+            setTimeout(function() { setTranslateBtn('idle'); }, 3000);
+          },
+          onTranslatedTrack: function(track) {
+            console.log('[realtime] translated audio track ready', track);
+            // Hook for WebRTC peer-track replacement (future).
+          }
+        });
+        await realtime.start();
+      } catch (err) {
+        console.error('[realtime] start failed', err);
+        setTranslateBtn('error');
+        addSystemChat('No se pudo iniciar el traductor: ' + (err && err.message || 'error'));
+        setTimeout(function() { setTranslateBtn('idle'); }, 3000);
+      }
+    });
+
+    // Stop the Realtime session when leaving the room.
+    window.addEventListener('beforeunload', function() {
+      if (realtime) { try { realtime.stop(); } catch(_){} }
+    });
 
     // ----- rule_free_tier_limits — auto-end + 5-minute warning -----
     // If the room has a duration_limit_min (free tier), show a warning 5
@@ -688,6 +773,41 @@
     });
     socket.on('chat:message', function(msg) {
       addChatMessage(msg);
+    });
+
+    // ----- live captions (from server `caption` event) -----
+    // Server emits a 'caption' event into the room every time anyone's
+    // OpenAI Realtime session produces a transcript delta. We render it on
+    // the speaker's tile. If we don't have a tile keyed by the speaker's
+    // socket id, fall back to the local tile so the speaker still sees
+    // their own captions.
+    socket.on('caption', function(cap) {
+      if (!captionsOn) return;
+      var pid = 'sock-' + cap.speakerSocketId;
+      var tile = document.querySelector('.bm-tile[data-pid="' + pid + '"]');
+      if (!tile && cap.speakerUserId && String(cap.speakerUserId) === String(<%- JSON.stringify(p.user_id || 0) %>)) {
+        tile = document.querySelector('.bm-tile.local');
+      }
+      if (!tile) {
+        // Speaker not in our grid yet — show in active speaker bar.
+        var label = $('#bm-as-label');
+        label.style.display = 'inline-flex';
+        label.textContent = (cap.speakerName || 'Orador') + ': ' + (cap.translatedText || cap.originalText || '');
+        return;
+      }
+      var capBox = tile.querySelector('[data-role="caption"]');
+      var capTrans = tile.querySelector('[data-role="cap-translated"]');
+      var capOrig = tile.querySelector('[data-role="cap-original"]');
+      if (capBox && capTrans && capOrig) {
+        capTrans.textContent = cap.translatedText || '';
+        capOrig.textContent = cap.originalText || '';
+        capBox.classList.add('show');
+        // Auto-hide after 6s of silence on this tile.
+        clearTimeout(tile._capTimer);
+        tile._capTimer = setTimeout(function() {
+          capBox.classList.remove('show');
+        }, 6000);
+      }
     });
 
     // ----- host actions (mute / remove / lock / end / waiting-room toggle) -----

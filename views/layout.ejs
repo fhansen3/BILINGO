@@ -36,5 +36,106 @@
 
   <!-- Bootstrap 5 JS bundle -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <% if (typeof user !== 'undefined' && user) { %>
+    <!-- Realtime notifications (room invitations, etc.) for logged-in users
+         viewing server-rendered pages. Mirrors the SPA shell setup. -->
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script>
+      (function () {
+        // Minimal UI shim so notifications.js can call window.UI.notify / escapeHtml
+        // on EJS pages that don't load the SPA's ui.js.
+        if (!window.UI) {
+          window.UI = {
+            notify: function (msg, type) {
+              try { console.log('[notify]', type || 'info', msg); } catch (e) {}
+              if (window.bootstrap) {
+                var box = document.createElement('div');
+                box.className = 'toast align-items-center text-bg-' +
+                  ({success:'success', error:'danger', warn:'warning', info:'primary'}[type] || 'primary') +
+                  ' border-0 position-fixed';
+                box.style.cssText = 'bottom:20px; right:20px; z-index:10000;';
+                box.setAttribute('role', 'alert');
+                box.innerHTML = '<div class="d-flex"><div class="toast-body">' +
+                  String(msg).replace(/</g, '&lt;') + '</div>' +
+                  '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>';
+                document.body.appendChild(box);
+                var t = new window.bootstrap.Toast(box, { delay: 4000 });
+                t.show();
+                box.addEventListener('hidden.bs.toast', function () { box.remove(); });
+              }
+            },
+            escapeHtml: function (s) {
+              return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+          };
+        }
+        // Router shim so "Unirme" navigates to the room page (server-rendered).
+        if (!window.Router) {
+          window.Router = {
+            navigate: function (path) {
+              // path like 'room/<code>' → go to the server-rendered meeting page
+              if (/^room\//.test(path)) {
+                var code = path.slice(5);
+                // BASE_PATH-safe: use relative URL based on <base href>
+                window.location.assign('m/' + encodeURIComponent(code));
+              } else {
+                window.location.assign(path);
+              }
+            }
+          };
+        }
+        // Minimal API shim (notifications.js calls window.API.post for accept/decline)
+        if (!window.API) {
+          function apiBase() {
+            var b = document.querySelector('base');
+            var h = b ? b.getAttribute('href') : '';
+            if (!h || h === '/') return '';
+            return h.replace(/\/$/, '');
+          }
+          var BASE = apiBase();
+          async function req(p, opts) {
+            opts = opts || {};
+            var url = (p.indexOf('http') === 0) ? p : (BASE + '/' + p.replace(/^\/+/, ''));
+            var headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+            var fetchOpts = { method: opts.method || 'GET', credentials: 'include', headers: headers };
+            if (opts.body !== undefined) fetchOpts.body = JSON.stringify(opts.body);
+            var res = await fetch(url, fetchOpts);
+            var text = await res.text();
+            var data = null;
+            if (text) { try { data = JSON.parse(text); } catch (e) { data = text; } }
+            if (!res.ok) {
+              var msg = (data && data.error) || ('Error ' + res.status);
+              var err = new Error(msg); err.status = res.status; err.data = data; throw err;
+            }
+            return data;
+          }
+          window.API = {
+            base: BASE,
+            get: function (p) { return req(p); },
+            post: function (p, b) { return req(p, { method: 'POST', body: b }); }
+          };
+        }
+      })();
+    </script>
+    <script src="/js/notifications.js"></script>
+    <script>
+      // Boot the notifications socket as soon as the page is ready.
+      (function () {
+        function boot() {
+          if (window.Notifications && typeof window.Notifications.start === 'function') {
+            window.Notifications.start();
+          }
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', boot);
+        } else {
+          boot();
+        }
+      })();
+    </script>
+  <% } %>
 </body>
 </html>

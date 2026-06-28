@@ -4,7 +4,6 @@ const { verify } = require('../utils/jwt');
 const db = require('../config/db');
 const roomsService = require('../services/rooms.service');
 const { translateText } = require('../services/openaiTranslate');
-const { processSegment } = require('../services/translationPipeline');
 
 const MAX_PARTICIPANTS_PER_ROOM = Math.max(
   2,
@@ -320,8 +319,17 @@ function attachSockets(io) {
       }
     });
 
-    // Speak: a participant produced a spoken segment (audio blob OR pre-transcribed text).
-    // Runs the translation pipeline stub and broadcasts the per-listener result.
+    // Speak: REALTIME mode.
+    //
+    // Each participant runs their OWN OpenAI Realtime session in the browser
+    // (see public/js/realtime.js). That session both translates the audio
+    // and produces transcript deltas. The client forwards each transcript
+    // delta here so we can:
+    //   1. Render captions on the speaker's tile for everyone else.
+    //   2. Persist a transcript_segments row when isFinal=true.
+    //
+    // There is NO server-side STT, NO server-side TTS, and NO server-side
+    // translation. Audio is handled browser ↔ OpenAI directly over WebRTC.
     socket.on('speak', async (payload, ack) => {
       try {
         if (!socket.data.roomId) {
@@ -329,147 +337,78 @@ function attachSockets(io) {
           return;
         }
         const meetingId = socket.data.roomId;
-        const sourceLanguage = (payload && payload.sourceLanguage) || socket.data.sourceLang || 'en';
-        const originalText = payload && payload.originalText;
-        const audioBlob = payload && payload.audioBlob; // optional, opaque
+        const originalText = (payload && payload.originalText) || '';
+        const translatedText = (payload && payload.translatedText) || '';
+        const sourceLanguage = (payload && payload.sourceLanguage) || socket.data.sourceLang || 'auto';
+        const isFinal = !!(payload && payload.isFinal);
 
-        // Look up speaker participant id (best-effort).
-        let speakerParticipantId = null;
-        try {
-          const sp = await db.query(
-            `SELECT id FROM meeting_participants
-             WHERE room_id = ? AND user_id = ? AND status = 'admitted'
-             ORDER BY id DESC LIMIT 1`,
-            [meetingId, user.id]
-          );
-          if (sp.length) speakerParticipantId = sp[0].id;
-        } catch (_) { /* ignore */ }
-
-        // Collect listeners (every OTHER socket in the room) with their preferred target language.
-        const roomSockets = await io.in(`room:${meetingId}`).fetchSockets();
-        const listeners = [];
-        const seenParticipants = new Set();
-        for (const s of roomSockets) {
-          if (s.id === socket.id) continue;
-          const listenerLang = s.data.sourceLang || s.data.targetLang || 'en';
-          let participantId = null;
-          try {
-            const lp = await db.query(
-              `SELECT id FROM meeting_participants
-               WHERE room_id = ? AND user_id = ? AND status = 'admitted'
-               ORDER BY id DESC LIMIT 1`,
-              [meetingId, s.user.id]
-            );
-            if (lp.length) participantId = lp[0].id;
-          } catch (_) { /* ignore */ }
-
-          // Dedupe: same user on multiple sockets only logged once.
-          const dedupeKey = participantId || `u:${s.user.id}`;
-          if (seenParticipants.has(dedupeKey)) continue;
-          seenParticipants.add(dedupeKey);
-
-          listeners.push({
-            socketId: s.id,
-            userId: s.user.id,
-            participantId,
-            targetLanguage: listenerLang
-          });
+        if (!originalText && !translatedText) {
+          if (typeof ack === 'function') ack({ ok: true, skipped: true });
+          return;
         }
 
-        const result = await processSegment({
-          meetingId,
-          speakerParticipantId,
-          speakerUserId: user.id,
-          audioBlob,
-          originalText,
-          sourceLanguage,
-          targetLanguages: listeners.map(l => ({
-            participantId: l.participantId,
-            userId: l.userId,
-            targetLanguage: l.targetLanguage
-          }))
-        });
+        // Persist the segment only on the final delta (avoid spamming the DB
+        // with every partial). Best-effort — don't fail the broadcast if
+        // the insert fails.
+        let segmentId = null;
+        if (isFinal && originalText) {
+          try {
+            let speakerParticipantId = null;
+            try {
+              const sp = await db.query(
+                `SELECT id FROM meeting_participants
+                 WHERE room_id = ? AND user_id = ? AND status = 'admitted'
+                 ORDER BY id DESC LIMIT 1`,
+                [meetingId, user.id]
+              );
+              if (sp.length) speakerParticipantId = sp[0].id;
+            } catch (_) { /* ignore */ }
 
-        // Build the canonical "caption" payload (the design's caption event).
-        // Listeners use this to render the per-tile bilingual caption overlay.
-        const baseCaption = {
-          segmentId: result.segmentId,
+            const endMs = Date.now();
+            const translations = translatedText
+              ? { [normalizeLang(socket.data.sourceLang || 'en')]: { text: translatedText } }
+              : {};
+
+            const ins = await db.query(
+              `INSERT INTO transcript_segments
+                 (meeting_id, speaker_participant_id, speaker_user_id,
+                  source_language, original_text, translations,
+                  audio_duration_ms, start_ms, end_ms, confidence)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                meetingId,
+                speakerParticipantId,
+                user.id,
+                normalizeLang(sourceLanguage) || 'auto',
+                originalText,
+                JSON.stringify(translations),
+                1000,
+                endMs - 1000,
+                endMs,
+                0.95
+              ]
+            );
+            segmentId = ins.insertId;
+          } catch (e) {
+            console.warn('[speak] persist failed', e.message);
+          }
+        }
+
+        // Broadcast caption to everyone in the room (including the speaker).
+        const captionPayload = {
+          segmentId,
           speakerSocketId: socket.id,
           speakerUserId: user.id,
-          originalLanguage: result.sourceLanguage,
-          originalText: result.originalText,
-          translations: result.translations,
-          startMs: result.startMs,
-          endMs: result.endMs,
-          confidence: result.confidence,
-          audioDurationMs: result.audioDurationMs
+          speakerName: user.display_name,
+          originalLanguage: normalizeLang(sourceLanguage) || 'auto',
+          originalText,
+          translatedText,
+          isFinal
         };
-
-        // Broadcast to each listener with THEIR translation.
-        for (const l of listeners) {
-          const delivery = result.deliveries.find(d =>
-            (d.participantId && d.participantId === l.participantId) ||
-            (!d.participantId && d.userId === l.userId && d.targetLanguage === l.targetLanguage)
-          );
-          if (!delivery) continue;
-
-          io.to(l.socketId).emit('speak:translated', {
-            segmentId: result.segmentId,
-            speakerSocketId: socket.id,
-            speakerUserId: user.id,
-            sourceLanguage: result.sourceLanguage,
-            originalText: result.originalText,
-            targetLanguage: delivery.targetLanguage,
-            translatedText: delivery.translatedText,
-            audioUrl: delivery.audioUrl,
-            latency: {
-              audioInMs: delivery.audioInLatencyMs,
-              translationMs: delivery.translationLatencyMs,
-              ttsMs: delivery.ttsLatencyMs,
-              totalMs: delivery.totalLatencyMs
-            },
-            isDegraded: delivery.isDegraded
-          });
-
-          // The design's authoritative 'caption' event for the listener tile.
-          io.to(l.socketId).emit('caption', Object.assign({}, baseCaption, {
-            targetLanguage: delivery.targetLanguage,
-            translatedText: delivery.translatedText,
-            audioUrl: delivery.audioUrl,
-            latencyMs: delivery.totalLatencyMs,
-            isDegraded: delivery.isDegraded
-          }));
-        }
-
-        // Echo back to the speaker (their own captions).
-        socket.emit('speak:transcribed', {
-          segmentId: result.segmentId,
-          sourceLanguage: result.sourceLanguage,
-          originalText: result.originalText,
-          listenerCount: listeners.length
-        });
-
-        // Also emit a 'caption' to the speaker (own tile shows their own original).
-        socket.emit('caption', Object.assign({}, baseCaption, {
-          targetLanguage: result.sourceLanguage,
-          translatedText: result.originalText,
-          audioUrl: null,
-          latencyMs: 0,
-          isDegraded: false,
-          isSelf: true
-        }));
-
-        // And broadcast the segment (without per-listener translation) to the
-        // whole room so anyone listening can react to a new utterance.
-        io.to(`room:${meetingId}`).emit('caption:segment', baseCaption);
+        io.to(`room:${meetingId}`).emit('caption', captionPayload);
 
         if (typeof ack === 'function') {
-          ack({
-            ok: true,
-            segmentId: result.segmentId,
-            listenerCount: listeners.length,
-            translations: result.translations
-          });
+          ack({ ok: true, segmentId });
         }
       } catch (err) {
         console.error('[speak]', err);

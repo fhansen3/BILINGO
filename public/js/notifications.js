@@ -136,17 +136,66 @@
 
   function start() {
     if (socket && socket.connected) return socket;
+    if (socket) {
+      try { socket.connect(); } catch (e) {}
+      return socket;
+    }
     if (!window.io) {
       console.warn('[Notifications] socket.io not loaded');
       return null;
     }
-    // Build the socket URL using the same base the API uses, so it works
-    // through the /run/<id>/ proxy and on direct port too.
-    var base = (window.API && window.API.base) || '';
-    socket = window.io(base || undefined, {
+    // Socket.IO connection strategy under reverse proxy:
+    //
+    // The reverse proxy serves the app at a prefixed URL like
+    // /project-<userHash>/<projectHash>/  or  /run/<projectId>/
+    // but strips that prefix before forwarding to our backend. Our backend's
+    // Socket.IO is mounted at the default path "/socket.io" (no prefix).
+    //
+    // Client-side, we must:
+    //   - Connect to the SAME ORIGIN (pass undefined as server URL).
+    //   - Build an ABSOLUTE URL for the socket request that INCLUDES the
+    //     proxy prefix, so the browser actually hits the proxy at the
+    //     correct public path. socket.io-client treats `path` as an
+    //     absolute path on the current origin, so we must include the
+    //     prefix here (the proxy strips it before forwarding).
+    //
+    // Resolve the proxy prefix from <base href> (e.g. "/project-abc/xyz/").
+    var baseHref = '';
+    var baseEl = document.querySelector('base');
+    if (baseEl) baseHref = baseEl.getAttribute('href') || '';
+    // Normalize: ensure leading slash, strip trailing slash. Empty stays empty.
+    if (baseHref && baseHref !== '/') {
+      if (baseHref.charAt(0) !== '/') baseHref = '/' + baseHref;
+      baseHref = baseHref.replace(/\/$/, '');
+    } else {
+      baseHref = '';
+    }
+    var socketPath = baseHref + '/socket.io';
+
+    // The PUBLIC proxy (/project-<userHash>/<projectHash>/) does NOT support
+    // the HTTP→WebSocket upgrade for socket.io: the initial polling handshake
+    // succeeds, but the WS upgrade is refused (NS_ERROR_WEBSOCKET_CONNECTION_REFUSED)
+    // and the subsequent long-polling returns 502. Detect that case and stay
+    // on long-polling, which the proxy handles cleanly over plain HTTP.
+    //
+    // The INTERNAL proxy (/run/<projectId>/) DOES support WebSocket, so we
+    // keep the upgrade enabled there for lower latency.
+    var isPublicProxy = /^\/project-/.test(baseHref);
+    var transports = isPublicProxy ? ['polling'] : ['polling', 'websocket'];
+    var upgrade = !isPublicProxy;
+    console.log('[Notifications] connecting socket.io path=' + socketPath +
+      ' origin=' + window.location.origin +
+      ' transports=' + transports.join(',') + ' upgrade=' + upgrade);
+
+    socket = window.io(undefined, {
       withCredentials: true,
-      transports: ['websocket', 'polling'],
-      path: (base ? base.replace(/\/$/, '') : '') + '/socket.io'
+      transports: transports,
+      upgrade: upgrade,
+      path: socketPath,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      timeout: 20000
     });
 
     socket.on('connect', function () {
@@ -155,6 +204,10 @@
 
     socket.on('connect_error', function (err) {
       console.warn('[Notifications] socket error', err && err.message);
+    });
+
+    socket.on('disconnect', function (reason) {
+      console.log('[Notifications] socket disconnected:', reason);
     });
 
     socket.on('invite:incoming', function (payload) {
