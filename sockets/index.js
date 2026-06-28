@@ -249,12 +249,40 @@ function attachSockets(io) {
       }
     });
 
-    // WebRTC signaling — forward to specific peer
+    // WebRTC signaling — forward to specific peer.
+    // CRITICAL: we include the sender's CURRENT sourceLang/targetLang in the
+    // forwarded payload so the receiver knows what language the new peer
+    // speaks BEFORE audio starts flowing. Without this, the "peer joined
+    // second" case (B already in room when A joins) would receive an
+    // offer from A without any language info, and the OpenAI interpreter
+    // on B's side would refuse to route A's audio (anti-echo guard) until
+    // a later `peer:lang` event fixed it — meanwhile A's audio plays
+    // untranslated.
     socket.on('webrtc:offer', ({ to, sdp }) => {
-      io.to(to).emit('webrtc:offer', { from: socket.id, sdp, user: { id: user.id, displayName: user.display_name, avatarColor: user.avatar_color } });
+      io.to(to).emit('webrtc:offer', {
+        from: socket.id,
+        sdp,
+        user: {
+          id: user.id,
+          displayName: user.display_name,
+          avatarColor: user.avatar_color,
+          sourceLang: socket.data.sourceLang,
+          targetLang: socket.data.targetLang
+        }
+      });
     });
     socket.on('webrtc:answer', ({ to, sdp }) => {
-      io.to(to).emit('webrtc:answer', { from: socket.id, sdp });
+      io.to(to).emit('webrtc:answer', {
+        from: socket.id,
+        sdp,
+        user: {
+          id: user.id,
+          displayName: user.display_name,
+          avatarColor: user.avatar_color,
+          sourceLang: socket.data.sourceLang,
+          targetLang: socket.data.targetLang
+        }
+      });
     });
     socket.on('webrtc:ice', ({ to, candidate }) => {
       io.to(to).emit('webrtc:ice', { from: socket.id, candidate });

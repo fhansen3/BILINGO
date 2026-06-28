@@ -10,21 +10,40 @@
   // Public API:
   //   window.Notifications.start()  → call after successful login
   //   window.Notifications.stop()   → call on logout
-  //   window.Notifications.getSocket() → returns the shared socket (or null)
+  //   window.Notifications.getSocket() => returns the shared socket (or null)
 
   var socket = null;
-  var shownInvites = {}; // invitationId -> DOM node
+  var shownInvites = {}; // invitationId -> { node, ringStop }
+  var backdrop = null;
 
-  function ensureContainer() {
-    var c = document.getElementById('invite-popups');
-    if (c) return c;
-    c = document.createElement('div');
-    c.id = 'invite-popups';
-    c.style.cssText =
-      'position:fixed; top:80px; right:20px; z-index:9999;' +
-      'display:flex; flex-direction:column; gap:12px; max-width:360px;';
-    document.body.appendChild(c);
-    return c;
+  function ensureBackdrop() {
+    if (backdrop) return backdrop;
+    backdrop = document.createElement('div');
+    backdrop.id = 'invite-popups-backdrop';
+    backdrop.style.cssText =
+      'position:fixed; inset:0; z-index:9998;' +
+      'background:rgba(15,23,42,0.55);' +
+      'backdrop-filter: blur(2px);' +
+      '-webkit-backdrop-filter: blur(2px);' +
+      'display:none;' +
+      'align-items:center; justify-content:center;' +
+      'padding:20px;';
+    document.body.appendChild(backdrop);
+
+    var container = document.createElement('div');
+    container.id = 'invite-popups';
+    container.style.cssText =
+      'display:flex; flex-direction:column; gap:14px;' +
+      'width:100%; max-width:420px;' +
+      'max-height:90vh; overflow-y:auto;';
+    backdrop.appendChild(container);
+    return backdrop;
+  }
+
+  function refreshBackdropVisibility() {
+    if (!backdrop) return;
+    var hasAny = Object.keys(shownInvites).length > 0;
+    backdrop.style.display = hasAny ? 'flex' : 'none';
   }
 
   function avatarLetter(name) {
@@ -38,20 +57,32 @@
   }
 
   function dismiss(invitationId) {
-    var node = shownInvites[invitationId];
+    var entry = shownInvites[invitationId];
+    if (!entry) return;
+    // Stop the ringing sound (and vibration) for this invite.
+    try { entry.ringStop && entry.ringStop(); } catch (e) {}
+    var node = entry.node;
     if (node) {
       node.style.transition = 'opacity .25s, transform .25s';
       node.style.opacity = '0';
-      node.style.transform = 'translateX(20px)';
-      setTimeout(function () { node.remove(); }, 250);
-      delete shownInvites[invitationId];
+      node.style.transform = 'scale(0.95)';
+      setTimeout(function () {
+        node.remove();
+        refreshBackdropVisibility();
+      }, 250);
+    }
+    delete shownInvites[invitationId];
+    // If no more invites pending, stop any global vibration loop.
+    if (!Object.keys(shownInvites).length) {
+      try { navigator.vibrate && navigator.vibrate(0); } catch (e) {}
     }
   }
 
   function renderInvite(payload) {
     var id = payload.invitationId;
     if (!id || shownInvites[id]) return;
-    var container = ensureContainer();
+    var bd = ensureBackdrop();
+    var container = bd.querySelector('#invite-popups');
 
     var inviterName = (payload.inviter && payload.inviter.name) || 'Alguien';
     var avatarColor = (payload.inviter && payload.inviter.avatarColor) || '#58CC02';
@@ -62,31 +93,42 @@
     node.className = 'invite-popup card-bl';
     node.style.cssText =
       'background:#fff; border:1px solid var(--border, #e5e7eb); border-left:4px solid #58CC02;' +
-      'border-radius:12px; padding:14px 16px; box-shadow:0 8px 24px rgba(0,0,0,0.12);' +
-      'animation: invite-slide-in .25s ease-out;';
+      'border-radius:16px; padding:20px 22px;' +
+      'box-shadow:0 20px 60px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05);' +
+      'animation: invite-pop-in .3s cubic-bezier(.16,1,.3,1);' +
+      'position:relative;';
+
     node.innerHTML =
-      '<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">' +
-        '<div style="width:36px; height:36px; border-radius:50%; background:' + escapeHtml(avatarColor) +
-        '; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700;">' +
+      '<div style="display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size:.78rem; color:#16a34a; font-weight:800; text-transform:uppercase; letter-spacing:.6px;">' +
+        '<span class="invite-pulse-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#16a34a;"></span>' +
+        '<i class="fa-solid fa-phone-volume" style="font-size:.85rem;"></i>' +
+        '<span>Invitación entrante</span>' +
+      '</div>' +
+      '<div style="display:flex; align-items:center; gap:14px; margin-bottom:14px;">' +
+        '<div class="invite-avatar-ring" style="width:56px; height:56px; border-radius:50%; background:' + escapeHtml(avatarColor) +
+        '; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.4rem; flex-shrink:0;">' +
         escapeHtml(avatarLetter(inviterName)) + '</div>' +
         '<div style="flex:1; min-width:0;">' +
-          '<div style="font-weight:700; font-size:.95rem;">' + escapeHtml(inviterName) + '</div>' +
-          '<div style="font-size:.8rem; color:#6b7280;">te invita a una reunión</div>' +
+          '<div style="font-weight:800; font-size:1.05rem; color:#111827;">' + escapeHtml(inviterName) + '</div>' +
+          '<div style="font-size:.85rem; color:#6b7280;">te invita a una reunión</div>' +
         '</div>' +
-        '<button data-act="close" title="Cerrar" style="background:none; border:none; color:#9ca3af; cursor:pointer; font-size:1rem;"><i class="fa-solid fa-xmark"></i></button>' +
+        '<button data-act="close" title="Cerrar" style="background:none; border:none; color:#9ca3af; cursor:pointer; font-size:1.1rem; padding:6px;"><i class="fa-solid fa-xmark"></i></button>' +
       '</div>' +
-      '<div style="font-size:.88rem; color:#374151; margin-bottom:8px;">' +
+      '<div style="font-size:.9rem; color:#374151; margin-bottom:8px;">' +
         '<i class="fa-solid fa-video" style="color:#58CC02; margin-right:6px;"></i>' +
         '<strong>' + escapeHtml(topic) + '</strong>' +
-        ' · Sala <code style="background:#f3f4f6; padding:1px 6px; border-radius:4px;">' + escapeHtml(payload.roomCode) + '</code>' +
+        ' · Sala <code style="background:#f3f4f6; padding:1px 7px; border-radius:5px; font-size:.85em;">' + escapeHtml(payload.roomCode) + '</code>' +
       '</div>' +
-      (msg ? '<div style="font-size:.85rem; color:#4b5563; font-style:italic; margin-bottom:10px;">"' + escapeHtml(msg) + '"</div>' : '') +
-      '<div style="display:flex; gap:8px; margin-top:10px;">' +
-        '<button class="btn-bl btn-green btn-sm" data-act="accept" style="flex:1;"><i class="fa-solid fa-check"></i> Unirme</button>' +
-        '<button class="btn-bl btn-outline btn-sm" data-act="decline" style="flex:1;"><i class="fa-solid fa-xmark"></i> Rechazar</button>' +
+      (msg ? '<div style="font-size:.88rem; color:#4b5563; font-style:italic; margin:10px 0 4px; padding:8px 12px; background:#f9fafb; border-radius:8px; border-left:3px solid #e5e7eb;">"' + escapeHtml(msg) + '"</div>' : '') +
+      '<div style="display:flex; gap:10px; margin-top:16px;">' +
+        '<button class="btn-bl btn-green" data-act="accept" style="flex:1;"><i class="fa-solid fa-check"></i> Unirme</button>' +
+        '<button class="btn-bl btn-outline" data-act="decline" style="flex:1;"><i class="fa-solid fa-xmark"></i> Rechazar</button>' +
       '</div>';
 
     node.addEventListener('click', async function (e) {
+      // Block clicks on the backdrop from dismissing the popup — user MUST
+      // choose accept / decline / close explicitly.
+      e.stopPropagation();
       var btn = e.target.closest('[data-act]');
       if (!btn) return;
       var act = btn.getAttribute('data-act');
@@ -111,27 +153,111 @@
       }
     });
 
-    shownInvites[id] = node;
-    container.appendChild(node);
+    // Prevent backdrop clicks from dismissing — user must act.
+    bd.onclick = function (e) {
+      if (e.target === bd) {
+        // Optional UX: flash the popup so the user notices it. We do NOT
+        // close on backdrop click because invitations require an explicit
+        // accept/decline.
+        node.style.animation = 'none';
+        // force reflow so the animation can replay
+        void node.offsetWidth;
+        node.style.animation = 'invite-shake .4s ease';
+      }
+    };
 
-    // Optional sound: tiny beep using WebAudio (no asset needed).
-    try { playBeep(); } catch (e) {}
+    // Start ringing tone + vibration; capture the stop handle so dismiss()
+    // can cut it off cleanly.
+    var ringStop = startRingtone();
+    shownInvites[id] = { node: node, ringStop: ringStop };
+    container.appendChild(node);
+    refreshBackdropVisibility();
   }
 
-  function playBeep() {
-    if (!window.AudioContext && !window.webkitAudioContext) return;
-    var Ctx = window.AudioContext || window.webkitAudioContext;
-    var ctx = new Ctx();
-    var o = ctx.createOscillator();
-    var g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.frequency.value = 880;
-    g.gain.value = 0.04;
-    o.start();
-    setTimeout(function () {
-      o.frequency.value = 1320;
-      setTimeout(function () { o.stop(); ctx.close(); }, 90);
-    }, 90);
+  // ─────────────────────────────────────────────────────────────────────
+  // Ringtone — generated with WebAudio (no asset needed).
+  // Plays a classic two-pulse ring pattern in a loop until stopped.
+  // Returns a stop() function.
+  // ─────────────────────────────────────────────────────────────────────
+  function startRingtone() {
+    var stopped = false;
+    var ctx = null;
+    var schedTimer = null;
+
+    // Try to start audio. Browsers require a user gesture for AudioContext
+    // on first use; if blocked, we silently skip the sound but still vibrate.
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) {
+        ctx = new Ctx();
+        // If context is suspended (autoplay policy), try to resume; if it
+        // fails, we just won't get sound — the visual popup is the primary
+        // cue anyway.
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(function () {});
+        }
+      }
+    } catch (e) {
+      ctx = null;
+    }
+
+    // One "ring" = two short pulses (ding-dong style), then a gap.
+    // Pattern length: ~3.2s total → repeats.
+    function playRing() {
+      if (stopped || !ctx) return;
+      var now = ctx.currentTime;
+      // Pulse 1: 880 Hz, 0.35s
+      playTone(ctx, now,        0.35, 880);
+      // Pulse 2: 660 Hz, 0.35s (immediately after)
+      playTone(ctx, now + 0.4,  0.35, 660);
+    }
+
+    function playTone(ctx, startAt, dur, freq) {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      // Soft attack/release to avoid clicks.
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.18, startAt + 0.02);
+      gain.gain.setValueAtTime(0.18, startAt + dur - 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(startAt);
+      osc.stop(startAt + dur + 0.05);
+    }
+
+    // Loop: ring every ~2.6s. Up to ~30s safety cap so we never ring forever
+    // if the user navigates away with an invite still open and the dismiss
+    // isn't called for some reason.
+    var loopsLeft = 12;
+    function loop() {
+      if (stopped) return;
+      playRing();
+      loopsLeft--;
+      if (loopsLeft <= 0) return;
+      schedTimer = setTimeout(loop, 2600);
+    }
+    loop();
+
+    // Vibration (mobile). Pattern: [vibrate, pause, vibrate, pause, …]
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate([300, 200, 300, 1800, 300, 200, 300, 1800, 300, 200, 300]);
+      }
+    } catch (e) {}
+
+    return function stop() {
+      stopped = true;
+      if (schedTimer) { clearTimeout(schedTimer); schedTimer = null; }
+      try { navigator.vibrate && navigator.vibrate(0); } catch (e) {}
+      try {
+        if (ctx && ctx.state !== 'closed') {
+          // Give pending tones a beat to release, then close.
+          setTimeout(function () { try { ctx.close(); } catch (e) {} }, 200);
+        }
+      } catch (e) {}
+    };
   }
 
   function start() {
@@ -245,14 +371,36 @@
 
   function getSocket() { return socket; }
 
-  // Inject keyframes for slide-in animation.
+  // Inject keyframes for animations + pulse on the green dot.
   (function injectStyles() {
     if (document.getElementById('invite-popup-styles')) return;
     var st = document.createElement('style');
     st.id = 'invite-popup-styles';
     st.textContent =
-      '@keyframes invite-slide-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }' +
-      '.invite-popup .btn-bl { padding: 6px 10px; font-size: .85rem; }';
+      '@keyframes invite-pop-in {' +
+      '  from { opacity: 0; transform: scale(0.85) translateY(20px); }' +
+      '  to   { opacity: 1; transform: scale(1) translateY(0); }' +
+      '}' +
+      '@keyframes invite-shake {' +
+      '  0%, 100% { transform: translateX(0); }' +
+      '  20% { transform: translateX(-8px); }' +
+      '  40% { transform: translateX(8px); }' +
+      '  60% { transform: translateX(-6px); }' +
+      '  80% { transform: translateX(6px); }' +
+      '}' +
+      '@keyframes invite-pulse-dot {' +
+      '  0%   { box-shadow: 0 0 0 0   rgba(22,163,74,0.6); }' +
+      '  70%  { box-shadow: 0 0 0 10px rgba(22,163,74,0); }' +
+      '  100% { box-shadow: 0 0 0 0   rgba(22,163,74,0); }' +
+      '}' +
+      '@keyframes invite-avatar-ring {' +
+      '  0%   { box-shadow: 0 0 0 0   rgba(88,204,2,0.5); }' +
+      '  70%  { box-shadow: 0 0 0 14px rgba(88,204,2,0); }' +
+      '  100% { box-shadow: 0 0 0 0   rgba(88,204,2,0); }' +
+      '}' +
+      '.invite-popup .btn-bl { padding: 10px 14px; font-size: .9rem; }' +
+      '.invite-pulse-dot { animation: invite-pulse-dot 1.4s ease-out infinite; }' +
+      '.invite-avatar-ring { animation: invite-avatar-ring 1.8s ease-out infinite; }';
     document.head.appendChild(st);
   })();
 

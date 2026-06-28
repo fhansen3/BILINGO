@@ -30,3 +30,6 @@ build/
 # Misc
 nul
 *.tmp
+
+# Backups
+*.original

@@ -80,16 +80,18 @@
     });
   }
 
-  // Backoff schedule for auto-reconnect (ms). After the last entry, it stays
-  // at the last value (30s) forever — we never give up while the user has
-  // the meeting open.
-  const RECONNECT_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
+  // Backoff schedule for auto-reconnect (ms). First attempt is IMMEDIATE
+  // (0ms) so the user perceives no interruption. Only if successive attempts
+  // fail do we start backing off. After the last entry, it stays at the last
+  // value (30s) forever — we never give up while the user has the meeting open.
+  const RECONNECT_BACKOFF_MS = [0, 250, 1000, 2000, 4000, 8000, 16000, 30000];
 
   // Watchdog: how often we sanity-check the connection state.
-  const WATCHDOG_INTERVAL_MS = 5000;
+  const WATCHDOG_INTERVAL_MS = 2000;
   // If the connection has been NOT 'connected' for this long while supposed
-  // to be 'live', the watchdog forces a reconnect.
-  const WATCHDOG_DOWN_GRACE_MS = 12000;
+  // to be 'live', the watchdog forces a reconnect. Kept short so users
+  // don't sit on a dead session for more than ~3s.
+  const WATCHDOG_DOWN_GRACE_MS = 3000;
 
   class RealtimeInterpreter {
     constructor(opts) {
@@ -238,12 +240,14 @@
           const st = pc.iceConnectionState;
           console.log('[interpreter] iceConnectionState=' + st);
           if (st === 'failed') {
-            console.warn('[interpreter] ICE failed — scheduling reconnect');
+            console.warn('[interpreter] ICE failed — reconnecting immediately');
             this._scheduleReconnect('ice-failed');
           } else if (st === 'disconnected') {
-            console.warn('[interpreter] ICE disconnected (transient) — will reconnect if it persists');
-            // Give the browser a few seconds to recover on its own. The
-            // watchdog will pick this up if it doesn't recover.
+            console.warn('[interpreter] ICE disconnected — reconnecting immediately');
+            // Don't wait for the watchdog grace period; trigger reconnect now.
+            // If the browser self-recovers before our reconnect lands, the
+            // new session simply replaces the old one.
+            this._scheduleReconnect('ice-disconnected');
           }
         };
         pc.onconnectionstatechange = () => {
@@ -258,6 +262,9 @@
             this._scheduleReconnect('connection-' + cs);
           } else if (cs === 'disconnected') {
             if (!this._downSince) this._downSince = Date.now();
+            // Trigger an immediate reconnect attempt — don't wait for the
+            // watchdog grace period.
+            this._scheduleReconnect('connection-disconnected');
           }
         };
 
@@ -379,11 +386,20 @@
       this._teardown({ keepPeerStreams: true });
       this._setState('reconnecting');
 
-      this._reconnectTimer = setTimeout(() => {
+      if (delay <= 0) {
+        // Immediate reconnect — microtask, no timer delay.
         this._reconnectTimer = null;
-        if (this._userStopped) return;
-        this._connect({ initial: false }).catch(() => { /* already handled */ });
-      }, delay);
+        Promise.resolve().then(() => {
+          if (this._userStopped) return;
+          this._connect({ initial: false }).catch(() => { /* already handled */ });
+        });
+      } else {
+        this._reconnectTimer = setTimeout(() => {
+          this._reconnectTimer = null;
+          if (this._userStopped) return;
+          this._connect({ initial: false }).catch(() => { /* already handled */ });
+        }, delay);
+      }
     }
 
     _cancelReconnect() {
@@ -447,20 +463,13 @@
 
       this._onOnline = () => {
         if (this._userStopped) return;
-        console.log('[interpreter] network online — checking connection');
+        console.log('[interpreter] network online — reconnecting immediately');
         const cs = this.pc ? this.pc.connectionState : 'none';
         if (cs !== 'connected') {
-          // Cancel any pending backoff and try NOW.
+          // Cancel any pending backoff, reset attempt counter, and try NOW.
           this._cancelReconnect();
-          this._scheduleReconnect('network-online');
-          // Override the schedule with an immediate-ish attempt.
-          if (this._reconnectTimer) {
-            clearTimeout(this._reconnectTimer);
-            this._reconnectTimer = setTimeout(() => {
-              this._reconnectTimer = null;
-              if (!this._userStopped) this._connect({ initial: false }).catch(() => {});
-            }, 250);
-          }
+          this._reconnectAttempt = 0;
+          this._connect({ initial: false }).catch(() => {});
         }
       };
       this._onVisibility = () => {
@@ -468,8 +477,10 @@
         if (document.visibilityState !== 'visible') return;
         const cs = this.pc ? this.pc.connectionState : 'none';
         if (cs !== 'connected' && !this._reconnecting && !this._reconnectTimer) {
-          console.log('[interpreter] tab visible — kicking reconnect');
-          this._scheduleReconnect('visibility');
+          console.log('[interpreter] tab visible — reconnecting immediately');
+          this._cancelReconnect();
+          this._reconnectAttempt = 0;
+          this._connect({ initial: false }).catch(() => {});
         }
       };
 
@@ -544,6 +555,15 @@
       label = label || ('peer_' + Math.random().toString(36).slice(2, 8));
       if (!stream) return label;
 
+      // Diagnostic log — track ids should be the REMOTE peer's track ids,
+      // not anything from the local microphone.
+      try {
+        const tids = stream.getAudioTracks().map(t => t.id + '(label=' + (t.label || '?') + ')');
+        console.log('[interpreter] addPeerAudio label=' + label +
+                    ' audioTracks=' + stream.getAudioTracks().length +
+                    ' ids=[' + tids.join(', ') + ']');
+      } catch (_) {}
+
       // Remove existing entry of same label (if any) — but keep the new stream.
       const existing = this.peerSources.get(label);
       if (existing) {
@@ -560,6 +580,8 @@
         const src = this.mixerCtx.createMediaStreamSource(stream);
         src.connect(this.mixerDest);
         this.peerSources.set(label, { stream, srcNode: src });
+        console.log('[interpreter] mixer wired for ' + label +
+                    ' — sources in mixer now=' + this.peerSources.size);
       } catch (e) {
         console.warn('[Interpreter] addPeerAudio failed', e);
         // Still record the stream so it can be wired on reconnect.

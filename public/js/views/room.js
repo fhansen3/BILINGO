@@ -242,32 +242,115 @@
     }
 
     function pipeAudioToInterpreter(peerEntry, peerSocketId) {
-      if (!interpreter || interpreter.state !== 'live') return;
-      // Only route through the interpreter when this peer speaks a
-      // DIFFERENT language than mine. Same-language peers keep their
-      // original audio (we don't mute their tile, we don't feed them
-      // to OpenAI).
       const me = normLang(ctx.myLang);
       const them = normLang(peerEntry.sourceLang);
-      if (them && them === me) {
+
+      // PRE-LIVE GUARD: if the interpreter is still connecting but we
+      // already know this peer speaks a DIFFERENT language than ours, mute
+      // their raw <video> so the user doesn't hear them untranslated while
+      // OpenAI is finishing the handshake. Once the interpreter goes live,
+      // startInterpreter's onStatus will call this function again for every
+      // peer and the audio will be routed through the mixer.
+      if (interpreter && interpreter.state !== 'live') {
+        if (them && them !== me) {
+          try { peerEntry.tile.video.muted = true; } catch (_) {}
+        }
+        return;
+      }
+      if (!interpreter) {
+        // No interpreter at all — keep raw P2P audio audible.
+        try { peerEntry.tile.video.muted = false; } catch (_) {}
+        return;
+      }
+
+      // CRITICAL ANTI-ECHO GUARD:
+      // 1. If we don't yet KNOW the peer's language (sourceLang empty), DO NOT
+      //    feed them to OpenAI. But ALSO keep the <video> muted so the user
+      //    doesn't hear the raw peer while we wait. Otherwise the peer plays
+      //    untranslated for a fraction of a second, and worse, the model can
+      //    later echo the same audio.
+      // 2. If the peer speaks MY language, never feed them — keep the original
+      //    P2P audio. No translation needed.
+      if (!them) {
+        console.log('[room] pipe SKIP peer=' + peerSocketId +
+                    ' reason=no-lang-yet (keeping video muted) me=' + me);
+        try { peerEntry.tile.video.muted = true; } catch (_) {}
+        try { interpreter.removePeerAudio(peerSocketId); } catch (_) {}
+        return;
+      }
+      if (them === me) {
+        console.log('[room] pipe SKIP peer=' + peerSocketId +
+                    ' reason=same-lang me=' + me + ' them=' + them +
+                    ' (unmuting raw P2P audio)');
         try { peerEntry.tile.video.muted = false; } catch (_) {}
         try { interpreter.removePeerAudio(peerSocketId); } catch (_) {}
         return;
       }
+
+      // Different language confirmed → mute original audio and route to OpenAI.
+      const feedStream = peerEntry.audioStream || peerEntry.stream;
+      if (!feedStream || !feedStream.getAudioTracks().length) {
+        console.log('[room] no audio yet for peer ' + peerSocketId + ' — will retry on ontrack');
+        try { peerEntry.tile.video.muted = true; } catch (_) {}
+        return;
+      }
+
+      // ABSOLUTE SAFETY: make sure we are NEVER feeding our own microphone
+      // into the interpreter mixer. If even one track in `feedStream` matches
+      // a track from `localStream`, that's a bug somewhere upstream (browser
+      // loopback, mis-routed addTrack, etc) and would cause the user to hear
+      // themselves echoed back by OpenAI in their own language.
+      const localTrackIds = new Set(
+        (localStream ? localStream.getAudioTracks() : []).map(t => t.id)
+      );
+      const safeStream = new MediaStream();
+      let droppedLocal = 0;
+      feedStream.getAudioTracks().forEach(t => {
+        if (localTrackIds.has(t.id)) {
+          droppedLocal++;
+        } else {
+          safeStream.addTrack(t);
+        }
+      });
+      if (droppedLocal > 0) {
+        console.warn('[room] SAFETY: dropped ' + droppedLocal +
+                     ' LOCAL audio track(s) from peer feed ' + peerSocketId +
+                     ' — this would have caused self-echo through OpenAI');
+      }
+      if (!safeStream.getAudioTracks().length) {
+        console.warn('[room] peer ' + peerSocketId + ' had only local tracks!? skipping');
+        try { peerEntry.tile.video.muted = true; } catch (_) {}
+        return;
+      }
+
+      console.log('[room] pipe FEED peer=' + peerSocketId +
+                  ' me=' + me + ' them=' + them +
+                  ' tracks=' + safeStream.getAudioTracks().length);
       try { peerEntry.tile.video.muted = true; } catch (_) {}
-      try { interpreter.addPeerAudio(peerEntry.stream, peerSocketId); } catch (_) {}
+      try { interpreter.addPeerAudio(safeStream, peerSocketId); } catch (_) {}
     }
 
     // Re-evaluate auto-routing whenever peers or languages change.
     function refreshInterpreterRouting() {
-      if (!interpreter) return;
+      // If no peer needs translation and the user didn't explicitly turn the
+      // interpreter on, make sure it's OFF — even if it's still connecting.
+      // We never want a session open with OpenAI when nobody needs it,
+      // because the model can otherwise re-emit same-language audio (echo).
+      if (!someoneNeedsTranslation() && !userToggledInterp) {
+        if (interpreter) {
+          ui.status.textContent = 'Todos hablan tu idioma — traductor desactivado.';
+          stopInterpreter();
+        }
+        return;
+      }
+      // Auto-start: somebody needs translation but the interpreter isn't on.
+      if (!interpreter) {
+        ui.status.textContent = 'Detecté otro idioma en la sala — activando traductor automáticamente…';
+        startInterpreter();
+        return;
+      }
       if (interpreter.state !== 'live') return;
       peers.forEach((p, id) => pipeAudioToInterpreter(p, id));
-      // If nobody in the room speaks a different language anymore and
-      // the user didn't explicitly turn it on, shut it down to save tokens.
-      if (!someoneNeedsTranslation() && !userToggledInterp) {
-        stopInterpreter();
-      }
     }
 
     function createPeer(peerSocketId, label, userId, sourceLang) {
@@ -277,17 +360,43 @@
       localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
       const remoteStream = new MediaStream();
       tile.video.srcObject = remoteStream;
+      // We keep the AUDIO of this peer in a SEPARATE MediaStream so the
+      // interpreter's MediaStreamAudioSourceNode is created against a stream
+      // that already has the audio track (createMediaStreamSource takes a
+      // snapshot of the tracks at creation time and does NOT pick up tracks
+      // added later — that was the cause of "I don't hear them but they hear
+      // themselves"). Whenever a new audio track arrives we rebuild this
+      // dedicated audio stream and re-feed the interpreter.
+      let audioOnlyStream = null;
       pc.ontrack = (ev) => {
-        if (ev.streams && ev.streams[0]) {
-          ev.streams[0].getTracks().forEach(t => {
-            if (!remoteStream.getTracks().includes(t)) remoteStream.addTrack(t);
-          });
-        } else if (ev.track) {
-          remoteStream.addTrack(ev.track);
-        }
-        // Pipe audio to interpreter if active
+        const tracks = (ev.streams && ev.streams[0])
+          ? ev.streams[0].getTracks()
+          : (ev.track ? [ev.track] : []);
+        let audioChanged = false;
+        tracks.forEach(t => {
+          if (!remoteStream.getTracks().includes(t)) {
+            remoteStream.addTrack(t);
+            if (t.kind === 'audio') audioChanged = true;
+          }
+        });
         const entry = peers.get(peerSocketId);
-        if (entry) pipeAudioToInterpreter(entry, peerSocketId);
+        if (!entry) return;
+        // (Re)build the audio-only stream so we can feed it to the
+        // interpreter mixer at the right moment, with the audio track
+        // already attached.
+        if (audioChanged) {
+          audioOnlyStream = new MediaStream();
+          remoteStream.getAudioTracks().forEach(t => audioOnlyStream.addTrack(t));
+          entry.audioStream = audioOnlyStream;
+          console.log('[room] peer ' + peerSocketId + ' audio track attached — feeding interpreter');
+        } else if (!entry.audioStream && remoteStream.getAudioTracks().length) {
+          // Edge case: ontrack fired only for video, but the audio sneaked
+          // into remoteStream another way. Rebuild from what we have.
+          audioOnlyStream = new MediaStream();
+          remoteStream.getAudioTracks().forEach(t => audioOnlyStream.addTrack(t));
+          entry.audioStream = audioOnlyStream;
+        }
+        pipeAudioToInterpreter(entry, peerSocketId);
       };
       pc.onicecandidate = (ev) => {
         if (ev.candidate && socket) {
@@ -303,6 +412,7 @@
         pc, tile,
         label: label || peerSocketId.slice(0, 6),
         stream: remoteStream,
+        audioStream: null,    // built lazily on ontrack(kind=audio)
         userId,
         sourceLang: normLang(sourceLang) || ''
       };
@@ -404,8 +514,34 @@
     socket.on('peer:lang', ({ socketId, sourceLang, targetLang }) => {
       const p = peers.get(socketId);
       if (!p) return;
+      const prevLang = p.sourceLang;
       p.sourceLang = normLang(sourceLang || targetLang) || p.sourceLang;
+      console.log('[room] peer:lang update — socketId=' + socketId +
+                  ' prev=' + (prevLang || '(none)') +
+                  ' new=' + p.sourceLang +
+                  ' myLang=' + ctx.myLang);
+      // First, re-evaluate whether we need the interpreter at all (may
+      // auto-start it). This is async, so we cannot rely on it having
+      // finished routing this specific peer.
       refreshInterpreterRouting();
+      // Explicitly (re)route THIS peer's audio now that we know its
+      // language. This is the critical step for the "joined second"
+      // peer whose lang we only learn AFTER the WebRTC offer/answer
+      // has already fired ontrack. Without this, the peer's audio
+      // stays glued to the original (untranslated) <video> element.
+      if (interpreter && interpreter.state === 'live') {
+        pipeAudioToInterpreter(p, socketId);
+      } else if (interpreter && interpreter.state === 'connecting') {
+        // Queue a one-shot retry once the session goes live.
+        const tryAgain = () => {
+          if (interpreter && interpreter.state === 'live') {
+            pipeAudioToInterpreter(p, socketId);
+          } else {
+            setTimeout(tryAgain, 300);
+          }
+        };
+        setTimeout(tryAgain, 300);
+      }
     });
 
     // WebRTC signaling
@@ -418,7 +554,14 @@
           peerUser && peerUser.id,
           peerUser && (peerUser.sourceLang || peerUser.targetLang)
         );
+      } else if (peerUser && (peerUser.sourceLang || peerUser.targetLang)) {
+        // Update sourceLang in case we learn it now from the offer payload.
+        const newLang = normLang(peerUser.sourceLang || peerUser.targetLang);
+        if (newLang) entry.sourceLang = newLang;
       }
+      console.log('[room] webrtc:offer received from=' + from +
+                  ' peerLang=' + (entry.sourceLang || '(unknown)') +
+                  ' myLang=' + ctx.myLang);
       try {
         await entry.pc.setRemoteDescription(sdp);
         const answer = await entry.pc.createAnswer();
@@ -427,13 +570,36 @@
       } catch (e) {
         ui.status.textContent = 'Error procesando oferta: ' + (e.message || e);
       }
+      refreshInterpreterRouting();
+      // If the interpreter is already live AND we now know the peer's lang,
+      // make sure their audio is routed (ontrack may have fired before we
+      // knew the lang).
+      if (interpreter && interpreter.state === 'live') {
+        pipeAudioToInterpreter(entry, from);
+      }
     });
 
-    socket.on('webrtc:answer', async ({ from, sdp }) => {
+    socket.on('webrtc:answer', async ({ from, sdp, user: peerUser }) => {
       const entry = peers.get(from);
       if (!entry) return;
+      // If we learn the peer's language from the answer (it can arrive
+      // before the `peer:lang` broadcast), update it now and re-evaluate
+      // routing — same fix as for offers, but for the symmetric case
+      // where I was the OFFERER and didn't yet know the answerer's lang.
+      if (peerUser && (peerUser.sourceLang || peerUser.targetLang)) {
+        const newLang = normLang(peerUser.sourceLang || peerUser.targetLang);
+        if (newLang && newLang !== entry.sourceLang) {
+          console.log('[room] learned peer lang from answer — socketId=' + from +
+                      ' lang=' + newLang);
+          entry.sourceLang = newLang;
+        }
+      }
       try { await entry.pc.setRemoteDescription(sdp); }
       catch (e) { ui.status.textContent = 'Error procesando respuesta: ' + (e.message || e); }
+      refreshInterpreterRouting();
+      if (interpreter && interpreter.state === 'live') {
+        pipeAudioToInterpreter(entry, from);
+      }
     });
 
     socket.on('webrtc:ice', async ({ from, candidate }) => {
@@ -528,13 +694,14 @@
     }
 
     ui.btnInterp.addEventListener('click', () => {
-      if (interpreter && interpreter.state === 'live') {
+      if (interpreter && (interpreter.state === 'live' || interpreter.state === 'connecting' || interpreter.state === 'reconnecting')) {
         userToggledInterp = false;
         stopInterpreter();
       } else {
+        // Explicit user request — start regardless of room language mix.
         userToggledInterp = true;
         if (!someoneNeedsTranslation()) {
-          ui.status.textContent = 'Todos hablan tu idioma — no se necesita traducción. Activando igualmente…';
+          ui.status.textContent = 'Todos hablan tu idioma — no se necesita traducción, pero activo igual.';
         }
         startInterpreter();
       }
@@ -563,19 +730,20 @@
       ctx.myLang = ui.myLangSel.value;
       setMyLang(ctx.myLang);
       if (socket) socket.emit('lang:update', { sourceLang: ctx.myLang, targetLang: ctx.myLang });
-      if (interpreter && interpreter.state === 'live') {
-        stopInterpreter();
-        if (someoneNeedsTranslation() || userToggledInterp) {
-          await startInterpreter();
-        }
-      } else {
-        // Re-evaluate muting on existing peer tiles for the new lang
-        peers.forEach((p) => {
-          const me = normLang(ctx.myLang);
-          const them = normLang(p.sourceLang);
-          try { p.tile.video.muted = (them && them !== me && interpreter && interpreter.state === 'live'); } catch (_) {}
-        });
+      // If the interpreter is running, the OpenAI session is tied to the
+      // OLD nativeLang — we must tear it down so refreshInterpreterRouting
+      // can spin up a fresh one in the new language (if still needed).
+      if (interpreter) {
+        try { interpreter.stop(); } catch (_) {}
+        interpreter = null;
+        ui.btnInterp.classList.remove('on');
+        ui.btnInterp.querySelector('span').textContent = ' Traductor: OFF';
+        peers.forEach((p) => { try { p.tile.video.muted = false; } catch (_) {} });
       }
+      // Re-evaluate: this will auto-start the interpreter again if any peer
+      // still speaks a different language than the new "myLang", or shut it
+      // down if everyone now matches.
+      refreshInterpreterRouting();
     });
 
     // ── Leave ──────────────────────────────────────────────────────────
