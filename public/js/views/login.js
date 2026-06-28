@@ -13,7 +13,7 @@
         '<div class="auth-page">' +
           '<form class="auth-card" id="login-form">' +
             '<h2>¡Bienvenido de vuelta! <span style="font-size:1.8rem">👋</span></h2>' +
-            '<p class="auth-sub">Inicia sesión para seguir practicando</p>' +
+            '<p class="auth-sub">Inicia sesión para entrar a tus reuniones</p>' +
             '<div class="field">' +
               '<label>Email</label>' +
               '<input type="email" name="email" required autocomplete="email" placeholder="tu@email.com">' +

@@ -29,7 +29,7 @@
         statCard('fa-users', 'bg-green', stats.totalUsers, 'Usuarios totales') +
         statCard('fa-circle-dot', 'bg-blue', stats.onlineUsers, 'En línea ahora') +
         statCard('fa-video', 'bg-orange', stats.activeRooms, 'Salas activas') +
-        statCard('fa-clock', 'bg-purple', stats.totalMinutes, 'Minutos practicados') +
+        statCard('fa-clock', 'bg-purple', stats.totalMinutes, 'Minutos en reuniones') +
         statCard('fa-comments', 'bg-yellow', stats.totalMessages, 'Mensajes enviados') +
         statCard('fa-flag', 'bg-red', stats.pendingReports, 'Reportes pendientes');
     } catch (e) { console.error(e); }
@@ -56,7 +56,7 @@
     function renderUsers(users) {
       if (!users.length) return contentEl.innerHTML = empty('users', 'Sin usuarios');
       contentEl.innerHTML = '<table class="table-bl"><thead><tr>' +
-        '<th>Usuario</th><th>Email</th><th>Rol</th><th>Estado</th><th>Online</th><th>Idiomas</th><th>Acciones</th>' +
+        '<th>Usuario</th><th>Email</th><th>Rol</th><th>Estado</th><th>Online</th><th>Habla → Recibe</th><th>Acciones</th>' +
         '</tr></thead><tbody>' +
         users.map(function (u) {
           var statusBadge = u.status === 'active' ? 'green' : (u.status === 'banned' ? 'red' : 'orange');

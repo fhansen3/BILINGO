@@ -24,7 +24,7 @@
         '<div class="auth-page">' +
           '<form class="auth-card" id="reg-form" style="max-width:520px">' +
             '<h2>Únete a BiLingo Meet <span style="font-size:1.8rem">🎉</span></h2>' +
-            '<p class="auth-sub">Tu cuenta gratis para practicar con el mundo</p>' +
+            '<p class="auth-sub">Reuniones sin barreras de idioma para tu equipo internacional</p>' +
             '<div class="field">' +
               '<label>Nombre para mostrar</label>' +
               '<input type="text" name="displayName" required maxlength="100" placeholder="Cómo te llaman">' +
@@ -43,7 +43,7 @@
                 '<select name="nativeLanguage">' + langOptions() + '</select>' +
               '</div>' +
               '<div class="field">' +
-                '<label>Idioma a aprender</label>' +
+                '<label>Idioma de trabajo</label>' +
                 '<select name="learningLanguage">' + langOptions() + '</select>' +
               '</div>' +
             '</div>' +

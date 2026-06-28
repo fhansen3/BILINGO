@@ -18,14 +18,11 @@
       }).join('');
     }
 
-    var levels = ['beginner', 'intermediate', 'advanced', 'fluent'];
-    var levelLabels = { beginner: 'Principiante', intermediate: 'Intermedio', advanced: 'Avanzado', fluent: 'Fluido' };
-
     container.innerHTML =
       '<div class="app-shell">' +
         window.AppNav(user) +
         '<main class="main-content" style="max-width:760px">' +
-          '<div class="page-header"><div><h2>Tu perfil</h2><p class="subtitle">Edita cómo te ven los demás</p></div></div>' +
+          '<div class="page-header"><div><h2>Tu perfil</h2><p class="subtitle">Edita cómo te ven los demás en tus reuniones</p></div></div>' +
           '<div class="card-bl">' +
             '<div style="display:flex; gap:20px; align-items:center; margin-bottom:24px">' +
               window.UI.avatar(profile.display_name, profile.avatar_color, 'lg') +
@@ -36,16 +33,15 @@
             '</div>' +
             '<form id="profile-form">' +
               '<div class="field"><label>Nombre para mostrar</label><input name="display_name" value="' + window.UI.escapeHtml(profile.display_name) + '" required></div>' +
-              '<div class="field"><label>Bio</label><textarea name="bio" placeholder="Cuéntales algo sobre ti…">' + window.UI.escapeHtml(profile.bio || '') + '</textarea></div>' +
+              '<div class="field"><label>Bio</label><textarea name="bio" placeholder="Tu rol, equipo o algo sobre ti…">' + window.UI.escapeHtml(profile.bio || '') + '</textarea></div>' +
               '<div class="field-row">' +
-                '<div class="field"><label>Idioma nativo</label><select name="native_language">' + opts(profile.native_language) + '</select></div>' +
-                '<div class="field"><label>Idioma a aprender</label><select name="learning_language">' + opts(profile.learning_language) + '</select></div>' +
+                '<div class="field"><label>Idioma en el que hablas</label><select name="native_language">' + opts(profile.native_language) + '</select><small class="muted">El idioma en el que escribes y hablas durante las reuniones.</small></div>' +
+                '<div class="field"><label>Idioma en el que prefieres recibir</label><select name="learning_language">' + opts(profile.learning_language) + '</select><small class="muted">Cuando alguien escriba en otro idioma, lo verás traducido a este.</small></div>' +
               '</div>' +
+              '<input type="hidden" name="proficiency_level" value="' + window.UI.escapeHtml(profile.proficiency_level || 'fluent') + '">' +
               '<div class="field-row">' +
-                '<div class="field"><label>Nivel</label><select name="proficiency_level">' +
-                  levels.map(function (l) { return '<option value="' + l + '"' + (profile.proficiency_level === l ? ' selected' : '') + '>' + levelLabels[l] + '</option>'; }).join('') +
-                '</select></div>' +
                 '<div class="field"><label>País</label><input name="country" value="' + window.UI.escapeHtml(profile.country || '') + '"></div>' +
+                '<div class="field"><label>Empresa / Equipo</label><input name="company" value="' + window.UI.escapeHtml(profile.company || '') + '" placeholder="Opcional"></div>' +
               '</div>' +
               '<div class="field">' +
                 '<label>Color de avatar</label>' +

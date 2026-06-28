@@ -86,7 +86,7 @@
 
           <div class="row g-2 mb-3">
             <div class="col-md-6">
-              <label for="nativeLanguage" class="form-label">Idioma nativo</label>
+              <label for="nativeLanguage" class="form-label">Hablo en</label>
               <select class="form-select" id="nativeLanguage" name="nativeLanguage" required>
                 <option value="">— Elegir —</option>
                 <% (languages || []).forEach(function(l) { %>
@@ -98,7 +98,7 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label for="targetLanguage" class="form-label">Idioma objetivo</label>
+              <label for="targetLanguage" class="form-label">Quiero escuchar/leer en</label>
               <select class="form-select" id="targetLanguage" name="targetLanguage" required>
                 <option value="">— Elegir —</option>
                 <% (languages || []).forEach(function(l) { %>
@@ -112,7 +112,7 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label d-block small text-muted mb-1">Voz al hablar (tu idioma nativo)</label>
+            <label class="form-label d-block small text-muted mb-1">Voz al hablar (en el idioma que tú hablas)</label>
             <div class="btn-group" role="group" aria-label="Voz al hablar">
               <% ['female','male','neutral'].forEach(function(g) {
                    const cur = (form && form.speakingVoiceGender) || u.default_native_voice_gender || 'female'; %>
@@ -126,7 +126,7 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label d-block small text-muted mb-1">Voz al escuchar (idioma objetivo)</label>
+            <label class="form-label d-block small text-muted mb-1">Voz al escuchar (idioma traducido)</label>
             <div class="btn-group" role="group" aria-label="Voz al escuchar">
               <% ['female','male','neutral'].forEach(function(g) {
                    const cur = (form && form.listeningVoiceGender) || u.default_target_voice_gender || 'female'; %>

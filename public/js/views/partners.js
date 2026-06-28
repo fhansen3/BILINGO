@@ -14,14 +14,14 @@
         window.AppNav(user) +
         '<main class="main-content">' +
           '<div class="page-header">' +
-            '<div><h2>Buscar colegas</h2><p class="subtitle">Encuentra a alguien de tu equipo para invitar a una reunión</p></div>' +
+            '<div><h2>Buscar contactos</h2><p class="subtitle">Encuentra colegas de tu organización para invitar a una reunión</p></div>' +
           '</div>' +
           '<div class="card-bl">' +
             '<form id="filter-form" style="display:grid; grid-template-columns: 1fr 1fr auto auto; gap:12px; align-items:end">' +
               '<div class="field" style="margin:0"><label>Idioma nativo</label><select name="native"><option value="">Cualquiera</option>' +
                 LANGUAGES.map(function (l) { return '<option value="' + l + '">' + l + '</option>'; }).join('') +
               '</select></div>' +
-              '<div class="field" style="margin:0"><label>Otro idioma</label><select name="learning"><option value="">Cualquiera</option>' +
+              '<div class="field" style="margin:0"><label>Idioma de trabajo</label><select name="learning"><option value="">Cualquiera</option>' +
                 LANGUAGES.map(function (l) { return '<option value="' + l + '">' + l + '</option>'; }).join('') +
               '</select></div>' +
               '<div class="field" style="margin:0"><label><input type="checkbox" name="online" value="1" style="width:auto; margin-right:6px"> Solo en línea</label></div>' +
@@ -112,8 +112,8 @@
         '</div>' +
         (p.bio ? '<div style="font-size:0.9rem; color:var(--text-soft)">' + window.UI.escapeHtml(p.bio.length > 120 ? p.bio.slice(0, 117) + '…' : p.bio) + '</div>' : '') +
         '<div class="lang-pills">' +
-          (p.native_language ? '<span class="lang-pill"><i class="fa-solid fa-microphone"></i> ' + window.UI.escapeHtml(p.native_language) + '</span>' : '') +
-          (p.learning_language ? '<span class="lang-pill learn"><i class="fa-solid fa-book"></i> ' + window.UI.escapeHtml(p.learning_language) + '</span>' : '') +
+          (p.native_language ? '<span class="lang-pill"><i class="fa-solid fa-flag"></i> ' + window.UI.escapeHtml(p.native_language) + '</span>' : '') +
+          (p.learning_language ? '<span class="lang-pill learn"><i class="fa-solid fa-briefcase"></i> ' + window.UI.escapeHtml(p.learning_language) + '</span>' : '') +
         '</div>' +
         '<button class="btn-bl btn-green btn-sm" data-invite="' + p.id + '" data-name="' + window.UI.escapeHtml(p.display_name) + '"><i class="fa-solid fa-video"></i> Invitar a reunión</button>' +
       '</div>';

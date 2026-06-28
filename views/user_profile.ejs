@@ -80,11 +80,11 @@
       <div class="card bm-shadow-sm mb-3">
         <div class="card-body">
           <h2 class="h6 fw-bold mb-3"><i class="fa-solid fa-language me-2 text-primary"></i>Idiomas por defecto</h2>
-          <p class="text-muted small mb-3">Se aplican automáticamente al crear o unirte a una reunión.</p>
+          <p class="text-muted small mb-3">Se aplican automáticamente al crear o unirte a una reunión. Tú hablas en uno; recibes en otro traducido.</p>
 
           <div class="row g-3">
             <div class="col-12 col-md-6">
-              <label class="form-label small fw-semibold">Idioma nativo</label>
+              <label class="form-label small fw-semibold">Idioma en el que hablas</label>
               <select name="defaultNativeLanguage" class="form-select">
                 <option value="">Selecciona…</option>
                 <% (languages || []).forEach(function(lang){ %>
@@ -93,9 +93,10 @@
                   </option>
                 <% }); %>
               </select>
+              <div class="form-text">El idioma en el que escribirás y hablarás durante las reuniones.</div>
             </div>
             <div class="col-12 col-md-6">
-              <label class="form-label small fw-semibold">Idioma objetivo</label>
+              <label class="form-label small fw-semibold">Idioma en el que prefieres recibir</label>
               <select name="defaultTargetLanguage" class="form-select">
                 <option value="">Selecciona…</option>
                 <% (languages || []).forEach(function(lang){ %>
@@ -104,6 +105,7 @@
                   </option>
                 <% }); %>
               </select>
+              <div class="form-text">Cuando alguien hable en otro idioma, lo verás/oirás traducido a este.</div>
             </div>
           </div>
         </div>
