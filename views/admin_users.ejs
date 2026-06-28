@@ -1,0 +1,121 @@
+<%- include('partials/admin-subnav', { active: 'users' }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1">Usuarios</h1>
+    <p class="text-muted mb-0">Buscar, suspender, activar y cambiar el rol de usuarios.</p>
+  </div>
+</div>
+
+<% if (typeof flash !== 'undefined' && flash) { %>
+  <div class="alert alert-success alert-dismissible fade show" role="alert">
+    <%= flash %>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+<% } %>
+<% if (typeof flashError !== 'undefined' && flashError) { %>
+  <div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <%= flashError %>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+<% } %>
+
+<form method="get" action="/admin/users" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-5">
+      <label class="form-label">Buscar (email o nombre)</label>
+      <input type="text" class="form-control" name="search" value="<%= search || '' %>" placeholder="Ej. ana@bilingo.io">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Rol</label>
+      <select class="form-select" name="role">
+        <option value="" <%= !role ? 'selected' : '' %>>Todos</option>
+        <option value="user" <%= role==='user' ? 'selected' : '' %>>Usuario</option>
+        <option value="admin" <%= role==='admin' ? 'selected' : '' %>>Admin</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Estado</label>
+      <select class="form-select" name="status">
+        <option value="" <%= !status ? 'selected' : '' %>>Todos</option>
+        <option value="active" <%= status==='active' ? 'selected' : '' %>>Activo</option>
+        <option value="suspended" <%= status==='suspended' ? 'selected' : '' %>>Suspendido</option>
+        <option value="banned" <%= status==='banned' ? 'selected' : '' %>>Baneado</option>
+      </select>
+    </div>
+    <div class="col-md-1 d-grid">
+      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
+    </div>
+  </div>
+</form>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Usuario</th>
+          <th>Email</th>
+          <th>Rol</th>
+          <th>Estado</th>
+          <th>Idiomas</th>
+          <th>Creado</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (!users || users.length === 0) { %>
+          <tr><td colspan="8" class="text-center text-muted py-4">Sin resultados.</td></tr>
+        <% } %>
+        <% (users || []).forEach(function(u) { %>
+          <tr>
+            <td><%= u.id %></td>
+            <td>
+              <span class="d-inline-block rounded-circle me-2" style="width:28px;height:28px;background:<%= u.avatar_color || '#58CC02' %>;color:#fff;text-align:center;line-height:28px;">
+                <%= (u.display_name || '?').charAt(0).toUpperCase() %>
+              </span>
+              <%= u.display_name %>
+            </td>
+            <td><%= u.email %></td>
+            <td>
+              <span class="badge bg-<%= u.role==='admin' ? 'warning text-dark' : 'secondary' %>"><%= u.role %></span>
+            </td>
+            <td>
+              <% if (u.status==='active') { %><span class="badge bg-success">Activo</span><% } %>
+              <% if (u.status==='suspended') { %><span class="badge bg-warning text-dark">Suspendido</span><% } %>
+              <% if (u.status==='banned') { %><span class="badge bg-danger">Baneado</span><% } %>
+            </td>
+            <td class="small text-muted">
+              <%= u.native_language || '—' %> → <%= u.learning_language || '—' %>
+            </td>
+            <td class="small text-muted"><%= u.created_at ? new Date(u.created_at).toISOString().slice(0,10) : '' %></td>
+            <td class="text-end">
+              <div class="btn-group btn-group-sm">
+                <% if (u.status === 'active') { %>
+                  <form method="post" action="/admin/users/<%= u.id %>/suspend" class="d-inline">
+                    <button type="submit" class="btn btn-outline-warning" title="Suspender"><i class="fa-solid fa-pause"></i></button>
+                  </form>
+                <% } else { %>
+                  <form method="post" action="/admin/users/<%= u.id %>/activate" class="d-inline">
+                    <button type="submit" class="btn btn-outline-success" title="Activar"><i class="fa-solid fa-play"></i></button>
+                  </form>
+                <% } %>
+
+                <form method="post" action="/admin/users/<%= u.id %>/role" class="d-inline">
+                  <input type="hidden" name="role" value="<%= u.role === 'admin' ? 'user' : 'admin' %>">
+                  <button type="submit" class="btn btn-outline-primary" title="Cambiar rol">
+                    <i class="fa-solid fa-user-shield"></i>
+                    <%= u.role === 'admin' ? 'a Usuario' : 'a Admin' %>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<p class="text-muted mt-2 small">Mostrando hasta 200 usuarios. Refina la búsqueda para acotar resultados.</p>

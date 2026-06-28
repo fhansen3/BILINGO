@@ -1,0 +1,94 @@
+<div class="row justify-content-center py-5">
+  <div class="col-12" style="max-width: 440px;">
+    <div class="card bm-shadow-sm p-4">
+      <div class="text-center mb-4">
+        <div class="mb-2" style="font-size:2.5rem">🦜</div>
+        <h1 class="h3 fw-bold mb-1">Crea tu cuenta</h1>
+        <p class="text-muted small mb-0">Únete y empieza a reunirte sin barreras de idioma.</p>
+      </div>
+
+      <% if (typeof error !== 'undefined' && error) { %>
+        <div class="alert alert-danger small py-2 mb-3">
+          <i class="fa-solid fa-triangle-exclamation me-1"></i> <%= error %>
+        </div>
+      <% } %>
+
+      <form action="/signup" method="post" novalidate>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Nombre para mostrar</label>
+          <input
+            type="text"
+            name="displayName"
+            class="form-control"
+            placeholder="Ej. Ana García"
+            value="<%= form.displayName || '' %>"
+            maxlength="100"
+            required
+            autocomplete="name"
+          >
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Email</label>
+          <input
+            type="email"
+            name="email"
+            class="form-control"
+            placeholder="tu@email.com"
+            value="<%= form.email || '' %>"
+            required
+            autocomplete="email"
+          >
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Contraseña</label>
+          <input
+            type="password"
+            name="password"
+            class="form-control"
+            placeholder="Mínimo 6 caracteres"
+            minlength="6"
+            required
+            autocomplete="new-password"
+          >
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Mi idioma nativo</label>
+          <select name="nativeLanguage" class="form-select">
+            <option value="">Selecciona…</option>
+            <% (languages || []).forEach(function(lang){ %>
+              <option value="<%= lang.code %>" <%= form.nativeLanguage === lang.code ? 'selected' : '' %>>
+                <%= lang.native_name || lang.name %> (<%= lang.name %>)
+              </option>
+            <% }); %>
+          </select>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label small fw-semibold">Quiero practicar</label>
+          <select name="learningLanguage" class="form-select">
+            <option value="">Selecciona…</option>
+            <% (languages || []).forEach(function(lang){ %>
+              <option value="<%= lang.code %>" <%= form.learningLanguage === lang.code ? 'selected' : '' %>>
+                <%= lang.native_name || lang.name %> (<%= lang.name %>)
+              </option>
+            <% }); %>
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 btn-lg">
+          <i class="fa-solid fa-user-plus me-1"></i> Crear cuenta
+        </button>
+      </form>
+
+      <hr class="my-4">
+
+      <p class="text-center text-muted small mb-0">
+        ¿Ya tienes cuenta?
+        <a href="/login" class="fw-semibold">Inicia sesión</a>
+      </p>
+    </div>
+  </div>
+</div>

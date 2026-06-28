@@ -1,0 +1,114 @@
+<%
+  function fmtDate(d) {
+    if (!d) return '—';
+    var dt = new Date(d);
+    if (isNaN(dt.getTime())) return '—';
+    return dt.toLocaleString('es-ES', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+%>
+<div class="d-flex" style="min-height: calc(100vh - 60px);">
+  <%- include('partials/main-sidebar', { user: user, active: 'account' }) %>
+
+  <div class="flex-grow-1 px-3 px-lg-4 py-3" style="min-width:0; max-width: 820px;">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h1 class="h4 fw-bold mb-1">Configuración de la cuenta</h1>
+        <p class="text-muted small mb-0">Contraseña, sesiones activas y eliminación de la cuenta.</p>
+      </div>
+    </div>
+
+    <!-- Password -->
+    <div class="card bm-shadow-sm mb-3">
+      <div class="card-body">
+        <h2 class="h6 fw-bold mb-3"><i class="fa-solid fa-key me-2 text-primary"></i>Cambiar contraseña</h2>
+
+        <% if (passwordSaved) { %>
+          <div class="alert alert-success small py-2"><i class="fa-solid fa-circle-check me-1"></i> Contraseña actualizada.</div>
+        <% } %>
+        <% if (passwordError) { %>
+          <div class="alert alert-danger small py-2"><i class="fa-solid fa-triangle-exclamation me-1"></i> <%= passwordError %></div>
+        <% } %>
+
+        <form action="/account-settings/password" method="post">
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <label class="form-label small fw-semibold">Contraseña actual</label>
+              <input type="password" name="currentPassword" class="form-control" required autocomplete="current-password">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label small fw-semibold">Nueva contraseña</label>
+              <input type="password" name="newPassword" class="form-control" required minlength="6" autocomplete="new-password">
+            </div>
+            <div class="col-12 col-md-4">
+              <label class="form-label small fw-semibold">Confirmar nueva</label>
+              <input type="password" name="confirmPassword" class="form-control" required minlength="6" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="text-end mt-3">
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Actualizar contraseña</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Active sessions -->
+    <div class="card bm-shadow-sm mb-3">
+      <div class="card-body">
+        <h2 class="h6 fw-bold mb-3"><i class="fa-solid fa-desktop me-2 text-primary"></i>Sesiones activas</h2>
+        <p class="text-muted small mb-3">Estos son los dispositivos en los que tu cuenta tiene una sesión iniciada.</p>
+
+        <div class="list-group list-group-flush">
+          <% sessions.forEach(function(s){ %>
+            <div class="list-group-item px-0 d-flex align-items-center justify-content-between">
+              <div>
+                <div class="fw-semibold small">
+                  <%= s.userAgent.length > 80 ? s.userAgent.slice(0,80) + '…' : s.userAgent %>
+                  <% if (s.current) { %>
+                    <span class="badge text-bg-success ms-1">Este dispositivo</span>
+                  <% } %>
+                </div>
+                <div class="text-muted small">IP: <%= s.ip %> · iniciada <%= fmtDate(s.signedInAt) %></div>
+              </div>
+              <% if (s.current) { %>
+                <form action="/logout" method="post" class="m-0">
+                  <button class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-right-from-bracket me-1"></i>Cerrar sesión</button>
+                </form>
+              <% } %>
+            </div>
+          <% }); %>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete account -->
+    <div class="card border-danger bm-shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 fw-bold text-danger mb-3"><i class="fa-solid fa-triangle-exclamation me-2"></i>Eliminar cuenta</h2>
+        <p class="small text-muted">
+          Esta acción es <strong>permanente</strong>. Se eliminarán tus reuniones, mensajes e historial.
+          No podrá deshacerse.
+        </p>
+
+        <% if (deleteError) { %>
+          <div class="alert alert-danger small py-2"><i class="fa-solid fa-triangle-exclamation me-1"></i> <%= deleteError %></div>
+        <% } %>
+
+        <form action="/account-settings/delete" method="post" onsubmit="return confirm('¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');">
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Escribe <code>ELIMINAR</code> para confirmar</label>
+              <input type="text" name="confirm" class="form-control" placeholder="ELIMINAR" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Tu contraseña</label>
+              <input type="password" name="password" class="form-control" required autocomplete="current-password">
+            </div>
+          </div>
+          <div class="text-end mt-3">
+            <button type="submit" class="btn btn-danger"><i class="fa-solid fa-trash me-1"></i>Eliminar mi cuenta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

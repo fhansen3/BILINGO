@@ -1,0 +1,168 @@
+<%- include('partials/admin-subnav', { active: 'languages' }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1">Idiomas y voces</h1>
+    <p class="text-muted mb-0">Añade nuevos idiomas o voces TTS, y habilita/deshabilita los existentes.</p>
+  </div>
+</div>
+
+<% if (typeof flash !== 'undefined' && flash) { %>
+  <div class="alert alert-success alert-dismissible fade show"><%= flash %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+<% } %>
+<% if (typeof flashError !== 'undefined' && flashError) { %>
+  <div class="alert alert-danger alert-dismissible fade show"><%= flashError %><button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+<% } %>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><strong>Añadir idioma</strong></div>
+      <div class="card-body">
+        <form method="post" action="/admin/languages">
+          <div class="row g-2">
+            <div class="col-md-3">
+              <label class="form-label">Código</label>
+              <input type="text" class="form-control" name="code" maxlength="8" placeholder="es" required>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Nombre</label>
+              <input type="text" class="form-control" name="name" maxlength="80" placeholder="Spanish" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Nombre nativo</label>
+              <input type="text" class="form-control" name="native_name" maxlength="80" placeholder="Español">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Dirección</label>
+              <select class="form-select" name="direction">
+                <option value="ltr">LTR</option>
+                <option value="rtl">RTL</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Orden</label>
+              <input type="number" class="form-control" name="sort_order" value="0">
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary w-100"><i class="fa-solid fa-plus me-1"></i> Añadir</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-white"><strong>Idiomas</strong></div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr><th>Código</th><th>Nombre</th><th>Nativo</th><th>Dir.</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            <% (languages || []).forEach(function(l){ %>
+              <tr>
+                <td><code><%= l.code %></code></td>
+                <td><%= l.name %></td>
+                <td class="text-muted"><%= l.native_name || '—' %></td>
+                <td><%= l.direction %></td>
+                <td>
+                  <% if (l.is_enabled) { %><span class="badge bg-success">Activo</span><% } else { %><span class="badge bg-secondary">Inactivo</span><% } %>
+                </td>
+                <td class="text-end">
+                  <form method="post" action="/admin/languages/<%= l.id %>/toggle" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                      <i class="fa-solid <%= l.is_enabled ? 'fa-toggle-on' : 'fa-toggle-off' %>"></i>
+                      <%= l.is_enabled ? 'Desactivar' : 'Activar' %>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (!languages || !languages.length) { %><tr><td colspan="6" class="text-center text-muted py-3">Sin idiomas.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card mb-3">
+      <div class="card-header bg-white"><strong>Añadir voz</strong></div>
+      <div class="card-body">
+        <form method="post" action="/admin/voices">
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label">Idioma</label>
+              <select class="form-select" name="language_code" required>
+                <% (languages || []).forEach(function(l){ %>
+                  <option value="<%= l.code %>"><%= l.code %> · <%= l.name %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Clave</label>
+              <input type="text" class="form-control" name="voice_key" maxlength="80" placeholder="es_female_1" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Género</label>
+              <select class="form-select" name="gender">
+                <option value="female">female</option>
+                <option value="male">male</option>
+                <option value="neutral">neutral</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Nombre visible</label>
+              <input type="text" class="form-control" name="display_name" maxlength="120" placeholder="Lucía (Spanish, F)" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Proveedor</label>
+              <input type="text" class="form-control" name="provider" value="mock" maxlength="40">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Voice ID</label>
+              <input type="text" class="form-control" name="provider_voice_id" maxlength="120" placeholder="mock-es-1" required>
+            </div>
+            <div class="col-12 d-grid">
+              <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus me-1"></i> Añadir voz</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header bg-white"><strong>Voces</strong></div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr><th>Idioma</th><th>Clave</th><th>Nombre</th><th>Género</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            <% (voices || []).forEach(function(v){ %>
+              <tr>
+                <td><code><%= v.language_code %></code></td>
+                <td><%= v.voice_key %></td>
+                <td><%= v.display_name %></td>
+                <td><%= v.gender %></td>
+                <td>
+                  <% if (v.is_enabled) { %><span class="badge bg-success">Activo</span><% } else { %><span class="badge bg-secondary">Inactivo</span><% } %>
+                </td>
+                <td class="text-end">
+                  <form method="post" action="/admin/voices/<%= v.id %>/toggle" class="d-inline">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                      <i class="fa-solid <%= v.is_enabled ? 'fa-toggle-on' : 'fa-toggle-off' %>"></i>
+                      <%= v.is_enabled ? 'Desactivar' : 'Activar' %>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (!voices || !voices.length) { %><tr><td colspan="6" class="text-center text-muted py-3">Sin voces.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

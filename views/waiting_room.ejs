@@ -1,0 +1,146 @@
+<%
+  const m = meeting || {};
+  const p = participant || {};
+%>
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+        <h4 class="mb-3"><%= m.name || 'Reunión' %></h4>
+        <p class="text-muted" id="wr_message">
+          <i class="fa-solid fa-hourglass-half me-1"></i>
+          El anfitrión te dejará entrar pronto<span id="wrDots">…</span>
+        </p>
+
+        <div class="ratio ratio-16x9 bg-dark rounded mb-3 mx-auto position-relative overflow-hidden" id="wr_video_preview" style="max-width:480px;">
+          <video id="waitPreview" autoplay muted playsinline
+                 style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
+        </div>
+
+        <div class="d-flex justify-content-center gap-2 mb-3">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="wr_mic_toggle">
+            <i class="fa-solid fa-microphone me-1"></i><span>Silenciar mic</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="wr_cam_toggle">
+            <i class="fa-solid fa-video me-1"></i><span>Apagar cámara</span>
+          </button>
+        </div>
+
+        <div class="small text-muted mb-2">
+          Te uniste como <strong><%= p.display_name %></strong>
+        </div>
+        <div id="waitStatusMsg" class="small text-muted">
+          <span class="spinner-border spinner-border-sm me-1"></span>
+          Esperando confirmación del anfitrión…
+        </div>
+
+        <hr>
+        <a href="/dashboard" class="btn btn-outline-secondary btn-sm" id="wr_leave">
+          <i class="fa-solid fa-arrow-left me-1"></i> Salir de la sala de espera
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function() {
+  var videoEl = document.getElementById('waitPreview');
+  var statusMsg = document.getElementById('waitStatusMsg');
+  var micBtn = document.getElementById('wr_mic_toggle');
+  var camBtn = document.getElementById('wr_cam_toggle');
+  var roomCode = <%- JSON.stringify(m.room_code) %>;
+  var participantId = <%- JSON.stringify(p.id) %>;
+  var localStream = null;
+  var camOn = true;
+  var micOn = true;
+  var redirected = false;
+
+  function showAdmitted() {
+    if (redirected) return;
+    redirected = true;
+    statusMsg.innerHTML = '<i class="fa-solid fa-check text-success me-1"></i> ¡Bienvenido! Entrando…';
+    setTimeout(function() {
+      window.location.href = '/m/' + encodeURIComponent(roomCode) + '/room';
+    }, 600);
+  }
+  function showDenied() {
+    if (redirected) return;
+    redirected = true;
+    statusMsg.innerHTML = '<i class="fa-solid fa-ban text-danger me-1"></i> El anfitrión denegó tu acceso. Redirigiendo…';
+    setTimeout(function() {
+      window.location.href = '/dashboard';
+    }, 1500);
+  }
+
+  // ----- camera preview -----
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(function(stream) {
+      localStream = stream;
+      videoEl.srcObject = stream;
+    }).catch(function() { /* ignore — preview-only */ });
+  }
+
+  if (micBtn) {
+    micBtn.addEventListener('click', function() {
+      if (!localStream) return;
+      micOn = !micOn;
+      localStream.getAudioTracks().forEach(function(t) { t.enabled = micOn; });
+      micBtn.querySelector('span').textContent = micOn ? 'Silenciar mic' : 'Activar mic';
+      micBtn.querySelector('i').className = micOn ? 'fa-solid fa-microphone me-1' : 'fa-solid fa-microphone-slash me-1';
+      micBtn.classList.toggle('btn-outline-secondary', micOn);
+      micBtn.classList.toggle('btn-warning', !micOn);
+    });
+  }
+  if (camBtn) {
+    camBtn.addEventListener('click', function() {
+      if (!localStream) return;
+      camOn = !camOn;
+      localStream.getVideoTracks().forEach(function(t) { t.enabled = camOn; });
+      camBtn.querySelector('span').textContent = camOn ? 'Apagar cámara' : 'Encender cámara';
+      camBtn.querySelector('i').className = camOn ? 'fa-solid fa-video me-1' : 'fa-solid fa-video-slash me-1';
+      camBtn.classList.toggle('btn-outline-secondary', camOn);
+      camBtn.classList.toggle('btn-warning', !camOn);
+    });
+  }
+
+  // ----- socket.io (real-time admit/deny) -----
+  var socket = null;
+  try {
+    if (window.io) {
+      socket = window.io({ path: '/socket.io', transports: ['polling'], upgrade: false });
+      socket.on('connect', function() {
+        socket.emit('waiting', { roomCode: roomCode, participantId: participantId });
+      });
+      socket.on('waiting:ack', function(){ /* registered */ });
+      socket.on('waiting:error', function(err) {
+        // fall back to polling silently
+        console.warn('[waiting:error]', err && err.message);
+      });
+      socket.on('host:admit', function(payload) {
+        if (!payload || Number(payload.participantId) === Number(participantId)) showAdmitted();
+      });
+      socket.on('host:deny', function(payload) {
+        if (!payload || Number(payload.participantId) === Number(participantId)) showDenied();
+      });
+    }
+  } catch (e) { console.warn('[waiting socket]', e && e.message); }
+
+  // ----- HTTP polling fallback (every 4s) — survives if socket fails -----
+  function poll() {
+    if (redirected) return;
+    fetch('/api/m/' + encodeURIComponent(roomCode) + '/admit-status?pid=' + encodeURIComponent(participantId), {
+      credentials: 'same-origin', headers: { 'Accept': 'application/json' }
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      if (!data || redirected) return;
+      if (data.status === 'admitted') { showAdmitted(); }
+      else if (data.status === 'denied' || data.status === 'left') { showDenied(); }
+      else { setTimeout(poll, 4000); }
+    }).catch(function() {
+      setTimeout(poll, 6000);
+    });
+  }
+  setTimeout(poll, 2000);
+})();
+</script>

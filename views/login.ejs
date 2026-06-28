@@ -1,0 +1,67 @@
+<div class="row justify-content-center py-5">
+  <div class="col-12" style="max-width: 440px;">
+    <div class="card bm-shadow-sm p-4">
+      <div class="text-center mb-4">
+        <div class="mb-2" style="font-size:2.5rem">🦜</div>
+        <h1 class="h3 fw-bold mb-1">Bienvenido de nuevo</h1>
+        <p class="text-muted small mb-0">Accede a tu cuenta para continuar.</p>
+      </div>
+
+      <% if (typeof error !== 'undefined' && error) { %>
+        <div class="alert alert-danger small py-2 mb-3">
+          <i class="fa-solid fa-triangle-exclamation me-1"></i> <%= error %>
+        </div>
+      <% } %>
+      <% if (typeof info !== 'undefined' && info) { %>
+        <div class="alert alert-success small py-2 mb-3">
+          <i class="fa-solid fa-circle-check me-1"></i> <%= info %>
+        </div>
+      <% } %>
+
+      <form action="/login<%= next && next !== '/dashboard' ? '?next=' + encodeURIComponent(next) : '' %>" method="post" novalidate>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Email</label>
+          <input
+            type="email"
+            name="email"
+            class="form-control"
+            placeholder="tu@email.com"
+            value="<%= form.email || '' %>"
+            required
+            autocomplete="email"
+            autofocus
+          >
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label small fw-semibold">Contraseña</label>
+          <input
+            type="password"
+            name="password"
+            class="form-control"
+            placeholder="Tu contraseña"
+            required
+            autocomplete="current-password"
+          >
+        </div>
+
+        <div class="d-flex justify-content-end mb-4">
+          <a href="/forgot-password" class="small text-muted">¿Olvidaste tu contraseña?</a>
+        </div>
+
+        <input type="hidden" name="next" value="<%= next || '/dashboard' %>">
+
+        <button type="submit" class="btn btn-primary w-100 btn-lg">
+          <i class="fa-solid fa-right-to-bracket me-1"></i> Entrar
+        </button>
+      </form>
+
+      <hr class="my-4">
+
+      <p class="text-center text-muted small mb-0">
+        ¿No tienes cuenta?
+        <a href="/signup" class="fw-semibold">Créala gratis</a>
+      </p>
+    </div>
+  </div>
+</div>

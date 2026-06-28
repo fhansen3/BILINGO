@@ -1,0 +1,315 @@
+<%
+  const m = meeting || {};
+  const u = user || {};
+%>
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div>
+            <div class="text-muted small">Reunión</div>
+            <h4 class="mb-1"><%= m.name || 'Reunión instantánea' %></h4>
+            <div class="small text-muted">Código: <code><%= m.room_code %></code></div>
+          </div>
+          <a href="/dashboard" class="btn btn-link text-decoration-none">
+            <i class="fa-solid fa-xmark"></i> Cancelar
+          </a>
+        </div>
+
+        <div class="ratio ratio-16x9 bg-dark rounded mb-3 position-relative overflow-hidden">
+          <video id="lobbyPreview" autoplay muted playsinline
+                 style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
+          <div id="lobbyPreviewMsg"
+               class="position-absolute top-50 start-50 translate-middle text-white text-center small"
+               style="display:none;">
+            <i class="fa-solid fa-video-slash fa-2x mb-2"></i><br>
+            Cámara desactivada
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small text-muted mb-1">Nivel de micrófono</label>
+          <div class="progress" style="height:10px;">
+            <div id="vuMeter" class="progress-bar bg-success" role="progressbar"
+                 style="width:0%;transition:width 80ms linear;"></div>
+          </div>
+        </div>
+
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label small">Cámara</label>
+            <select id="cameraSelect" class="form-select form-select-sm"></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Micrófono</label>
+            <select id="micSelect" class="form-select form-select-sm"></select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Altavoz</label>
+            <select id="speakerSelect" class="form-select form-select-sm"></select>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <button type="button" id="toggleCamBtn" class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-video"></i> <span>Cámara</span>
+          </button>
+          <button type="button" id="toggleMicBtn" class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-microphone"></i> <span>Micrófono</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Prepárate para entrar</h5>
+
+        <% if (typeof error !== 'undefined' && error) { %>
+          <div class="alert alert-danger py-2 small mb-3"><%= error %></div>
+        <% } %>
+
+        <form method="POST" action="/m/<%= m.room_code %>/join" id="joinForm">
+          <div class="mb-3">
+            <label for="displayName" class="form-label">Tu nombre</label>
+            <input type="text" class="form-control" id="displayName" name="displayName"
+                   maxlength="100" required
+                   value="<%= (form && form.displayName) || (u.display_name || '') %>"
+                   <%= u.id ? 'readonly' : '' %>>
+            <% if (!u.id) { %>
+              <div class="form-text">Cómo te verán los demás participantes.</div>
+            <% } %>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label for="nativeLanguage" class="form-label">Idioma nativo</label>
+              <select class="form-select" id="nativeLanguage" name="nativeLanguage" required>
+                <option value="">— Elegir —</option>
+                <% (languages || []).forEach(function(l) { %>
+                  <option value="<%= l.code %>"
+                    <%= ((form && form.nativeLanguage) || u.native_language) === l.code ? 'selected' : '' %>>
+                    <%= l.native_name || l.name %>
+                  </option>
+                <% }); %>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label for="targetLanguage" class="form-label">Idioma objetivo</label>
+              <select class="form-select" id="targetLanguage" name="targetLanguage" required>
+                <option value="">— Elegir —</option>
+                <% (languages || []).forEach(function(l) { %>
+                  <option value="<%= l.code %>"
+                    <%= ((form && form.targetLanguage) || u.learning_language) === l.code ? 'selected' : '' %>>
+                    <%= l.native_name || l.name %>
+                  </option>
+                <% }); %>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label d-block small text-muted mb-1">Voz al hablar (tu idioma nativo)</label>
+            <div class="btn-group" role="group" aria-label="Voz al hablar">
+              <% ['female','male','neutral'].forEach(function(g) {
+                   const cur = (form && form.speakingVoiceGender) || u.default_native_voice_gender || 'female'; %>
+                <input type="radio" class="btn-check" name="speakingVoiceGender" id="sv_<%= g %>"
+                       value="<%= g %>" <%= cur === g ? 'checked' : '' %>>
+                <label class="btn btn-outline-primary btn-sm" for="sv_<%= g %>">
+                  <%= g === 'female' ? 'Femenina' : (g === 'male' ? 'Masculina' : 'Neutra') %>
+                </label>
+              <% }); %>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label d-block small text-muted mb-1">Voz al escuchar (idioma objetivo)</label>
+            <div class="btn-group" role="group" aria-label="Voz al escuchar">
+              <% ['female','male','neutral'].forEach(function(g) {
+                   const cur = (form && form.listeningVoiceGender) || u.default_target_voice_gender || 'female'; %>
+                <input type="radio" class="btn-check" name="listeningVoiceGender" id="lv_<%= g %>"
+                       value="<%= g %>" <%= cur === g ? 'checked' : '' %>>
+                <label class="btn btn-outline-primary btn-sm" for="lv_<%= g %>">
+                  <%= g === 'female' ? 'Femenina' : (g === 'male' ? 'Masculina' : 'Neutra') %>
+                </label>
+              <% }); %>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="deliveryMode" class="form-label">Modo de entrega</label>
+            <select class="form-select" id="deliveryMode" name="deliveryMode">
+              <% const dm = (form && form.deliveryMode) || u.default_delivery_mode || 'both'; %>
+              <option value="voice"  <%= dm==='voice'?'selected':'' %>>Solo voz</option>
+              <option value="text"   <%= dm==='text'?'selected':'' %>>Solo texto</option>
+              <option value="both"   <%= dm==='both'?'selected':'' %>>Voz y texto</option>
+            </select>
+          </div>
+
+          <div class="form-check form-switch mb-3">
+            <% const capOn = (form ? form.captionsEnabled : (u.default_captions_enabled !== 0)); %>
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="captionsEnabled" name="captionsEnabled" value="1"
+                   <%= capOn ? 'checked' : '' %>>
+            <label class="form-check-label" for="captionsEnabled">Mostrar subtítulos</label>
+          </div>
+
+          <input type="hidden" name="cameraDeviceId" id="cameraDeviceIdInput">
+          <input type="hidden" name="micDeviceId"    id="micDeviceIdInput">
+          <input type="hidden" name="speakerDeviceId" id="speakerDeviceIdInput">
+
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="fa-solid fa-door-open me-1"></i> Unirse a la reunión
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var videoEl = document.getElementById('lobbyPreview');
+  var previewMsg = document.getElementById('lobbyPreviewMsg');
+  var camSel = document.getElementById('cameraSelect');
+  var micSel = document.getElementById('micSelect');
+  var spkSel = document.getElementById('speakerSelect');
+  var vu = document.getElementById('vuMeter');
+  var camHid = document.getElementById('cameraDeviceIdInput');
+  var micHid = document.getElementById('micDeviceIdInput');
+  var spkHid = document.getElementById('speakerDeviceIdInput');
+  var toggleCam = document.getElementById('toggleCamBtn');
+  var toggleMic = document.getElementById('toggleMicBtn');
+
+  var currentStream = null;
+  var camOn = true, micOn = true;
+  var audioCtx = null, analyser = null, rafId = null;
+
+  function stopStream() {
+    if (currentStream) {
+      currentStream.getTracks().forEach(function(t) { try { t.stop(); } catch(e){} });
+      currentStream = null;
+    }
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (audioCtx) { try { audioCtx.close(); } catch(e){} audioCtx = null; }
+  }
+
+  function fillSelect(sel, devices, kind) {
+    sel.innerHTML = '';
+    var any = false;
+    devices.forEach(function(d) {
+      if (d.kind !== kind) return;
+      any = true;
+      var o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.label || (kind + ' (sin etiqueta)');
+      sel.appendChild(o);
+    });
+    if (!any) {
+      var o = document.createElement('option');
+      o.value = '';
+      o.textContent = '— ninguno —';
+      sel.appendChild(o);
+    }
+  }
+
+  function setupVU(stream) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var src = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser);
+      var data = new Uint8Array(analyser.frequencyBinCount);
+      function tick() {
+        analyser.getByteTimeDomainData(data);
+        var sum = 0;
+        for (var i = 0; i < data.length; i++) {
+          var v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        var rms = Math.sqrt(sum / data.length);
+        var pct = Math.min(100, Math.round(rms * 250));
+        vu.style.width = pct + '%';
+        rafId = requestAnimationFrame(tick);
+      }
+      tick();
+    } catch(e) { /* ignore */ }
+  }
+
+  function startPreview() {
+    stopStream();
+    var camId = camSel.value || undefined;
+    var micId = micSel.value || undefined;
+    camHid.value = camId || '';
+    micHid.value = micId || '';
+    spkHid.value = spkSel.value || '';
+
+    var constraints = {
+      video: camOn ? (camId ? { deviceId: { exact: camId } } : true) : false,
+      audio: micOn ? (micId ? { deviceId: { exact: micId } } : true) : false
+    };
+
+    if (!camOn && !micOn) {
+      videoEl.srcObject = null;
+      previewMsg.style.display = 'block';
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+      currentStream = stream;
+      videoEl.srcObject = stream;
+      previewMsg.style.display = camOn ? 'none' : 'block';
+      if (micOn) setupVU(stream);
+    }).catch(function(err) {
+      console.warn('getUserMedia error', err);
+      previewMsg.style.display = 'block';
+      previewMsg.innerHTML = '<i class="fa-solid fa-triangle-exclamation fa-2x mb-2"></i><br>No se pudo acceder a los dispositivos';
+    });
+  }
+
+  function listDevices() {
+    navigator.mediaDevices.enumerateDevices().then(function(devices) {
+      fillSelect(camSel, devices, 'videoinput');
+      fillSelect(micSel, devices, 'audioinput');
+      fillSelect(spkSel, devices, 'audiooutput');
+      startPreview();
+    });
+  }
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    previewMsg.style.display = 'block';
+    previewMsg.innerHTML = '<i class="fa-solid fa-triangle-exclamation fa-2x mb-2"></i><br>Tu navegador no soporta acceso a cámara/micrófono';
+  } else {
+    // Trigger permission prompt first so labels populate.
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(function(s) { s.getTracks().forEach(function(t){ t.stop(); }); listDevices(); })
+      .catch(function() { listDevices(); });
+  }
+
+  camSel.addEventListener('change', startPreview);
+  micSel.addEventListener('change', startPreview);
+  spkSel.addEventListener('change', function() { spkHid.value = spkSel.value || ''; });
+
+  toggleCam.addEventListener('click', function() {
+    camOn = !camOn;
+    toggleCam.classList.toggle('btn-outline-secondary', camOn);
+    toggleCam.classList.toggle('btn-danger', !camOn);
+    startPreview();
+  });
+  toggleMic.addEventListener('click', function() {
+    micOn = !micOn;
+    toggleMic.classList.toggle('btn-outline-secondary', micOn);
+    toggleMic.classList.toggle('btn-danger', !micOn);
+    startPreview();
+  });
+
+  window.addEventListener('beforeunload', stopStream);
+  document.getElementById('joinForm').addEventListener('submit', function() {
+    // Let form submit; stream will be cleaned by unload.
+  });
+})();
+</script>

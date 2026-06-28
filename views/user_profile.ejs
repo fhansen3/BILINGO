@@ -1,0 +1,162 @@
+<div class="d-flex" style="min-height: calc(100vh - 60px);">
+  <%- include('partials/main-sidebar', { user: user, active: 'profile' }) %>
+
+  <div class="flex-grow-1 px-3 px-lg-4 py-3" style="min-width:0; max-width: 920px;">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h1 class="h4 fw-bold mb-1">Tu perfil</h1>
+        <p class="text-muted small mb-0">Edita cómo te ven los demás y tus preferencias por defecto en las reuniones.</p>
+      </div>
+    </div>
+
+    <% if (saved) { %>
+      <div class="alert alert-success small py-2"><i class="fa-solid fa-circle-check me-1"></i> Perfil actualizado.</div>
+    <% } %>
+    <% if (error) { %>
+      <div class="alert alert-danger small py-2"><i class="fa-solid fa-triangle-exclamation me-1"></i> <%= error %></div>
+    <% } %>
+
+    <form action="/profile" method="post" novalidate>
+      <!-- Identity -->
+      <div class="card bm-shadow-sm mb-3">
+        <div class="card-body">
+          <h2 class="h6 fw-bold mb-3"><i class="fa-solid fa-id-card me-2 text-primary"></i>Identidad</h2>
+
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <% if (profile.avatar_url) { %>
+              <img src="<%= profile.avatar_url %>" alt="" class="rounded-circle" style="width:64px;height:64px;object-fit:cover;border:1px solid var(--bm-border)">
+            <% } else { %>
+              <span class="rounded-circle d-inline-flex align-items-center justify-content-center text-white fw-bold"
+                    style="width:64px;height:64px;font-size:1.5rem;background: <%= profile.avatar_color || '#4F46E5' %>">
+                <%= (profile.display_name || profile.email || '?').charAt(0).toUpperCase() %>
+              </span>
+            <% } %>
+            <div>
+              <div class="fw-bold"><%= profile.display_name %></div>
+              <div class="text-muted small"><%= profile.email %></div>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Nombre para mostrar</label>
+              <input type="text" name="displayName" class="form-control" required maxlength="100"
+                     value="<%= profile.display_name || '' %>">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">URL de avatar (opcional)</label>
+              <input type="url" name="avatarUrl" class="form-control" placeholder="https://…"
+                     value="<%= profile.avatar_url || '' %>">
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Color de avatar</label>
+              <div class="d-flex gap-2 flex-wrap">
+                <% avatarColors.forEach(function(c){ %>
+                  <label style="cursor:pointer">
+                    <input type="radio" name="avatarColor" value="<%= c %>"
+                           <%= (profile.avatar_color === c) ? 'checked' : '' %>
+                           style="position:absolute;opacity:0;pointer-events:none">
+                    <span class="d-inline-block rounded-circle"
+                          style="width:32px;height:32px;background: <%= c %>;border:3px solid <%= profile.avatar_color === c ? '#0F172A' : 'transparent' %>"></span>
+                  </label>
+                <% }); %>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label small fw-semibold">Bio</label>
+              <textarea name="bio" class="form-control" rows="2" maxlength="500"
+                        placeholder="Cuéntales algo sobre ti…"><%= profile.bio || '' %></textarea>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">País</label>
+              <input type="text" name="country" class="form-control" maxlength="80"
+                     value="<%= profile.country || '' %>">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Language defaults -->
+      <div class="card bm-shadow-sm mb-3">
+        <div class="card-body">
+          <h2 class="h6 fw-bold mb-3"><i class="fa-solid fa-language me-2 text-primary"></i>Idiomas por defecto</h2>
+          <p class="text-muted small mb-3">Se aplican automáticamente al crear o unirte a una reunión.</p>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Idioma nativo</label>
+              <select name="defaultNativeLanguage" class="form-select">
+                <option value="">Selecciona…</option>
+                <% (languages || []).forEach(function(lang){ %>
+                  <option value="<%= lang.code %>" <%= profile.native_language === lang.code ? 'selected' : '' %>>
+                    <%= lang.native_name || lang.name %> (<%= lang.name %>)
+                  </option>
+                <% }); %>
+              </select>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Idioma objetivo</label>
+              <select name="defaultTargetLanguage" class="form-select">
+                <option value="">Selecciona…</option>
+                <% (languages || []).forEach(function(lang){ %>
+                  <option value="<%= lang.code %>" <%= profile.learning_language === lang.code ? 'selected' : '' %>>
+                    <%= lang.native_name || lang.name %> (<%= lang.name %>)
+                  </option>
+                <% }); %>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Voice + delivery defaults -->
+      <div class="card bm-shadow-sm mb-3">
+        <div class="card-body">
+          <h2 class="h6 fw-bold mb-3"><i class="fa-solid fa-microphone-lines me-2 text-primary"></i>Voz y entrega por defecto</h2>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Género de voz para mi idioma nativo</label>
+              <select name="defaultNativeVoiceGender" class="form-select">
+                <option value="" <%= !profile.default_native_voice_gender ? 'selected' : '' %>>Sin preferencia</option>
+                <option value="female" <%= profile.default_native_voice_gender === 'female' ? 'selected' : '' %>>Femenina</option>
+                <option value="male"   <%= profile.default_native_voice_gender === 'male'   ? 'selected' : '' %>>Masculina</option>
+                <option value="neutral" <%= profile.default_native_voice_gender === 'neutral' ? 'selected' : '' %>>Neutra</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Género de voz para el idioma objetivo</label>
+              <select name="defaultTargetVoiceGender" class="form-select">
+                <option value="" <%= !profile.default_target_voice_gender ? 'selected' : '' %>>Sin preferencia</option>
+                <option value="female" <%= profile.default_target_voice_gender === 'female' ? 'selected' : '' %>>Femenina</option>
+                <option value="male"   <%= profile.default_target_voice_gender === 'male'   ? 'selected' : '' %>>Masculina</option>
+                <option value="neutral" <%= profile.default_target_voice_gender === 'neutral' ? 'selected' : '' %>>Neutra</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label small fw-semibold">Modo de entrega</label>
+              <select name="defaultDeliveryMode" class="form-select">
+                <option value="both"  <%= profile.default_delivery_mode === 'both'  ? 'selected' : '' %>>Voz + texto</option>
+                <option value="voice" <%= profile.default_delivery_mode === 'voice' ? 'selected' : '' %>>Solo voz</option>
+                <option value="text"  <%= profile.default_delivery_mode === 'text'  ? 'selected' : '' %>>Solo texto</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-6 d-flex align-items-end">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="captionsToggle"
+                       name="defaultCaptionsEnabled" value="on"
+                       <%= profile.default_captions_enabled ? 'checked' : '' %>>
+                <label class="form-check-label small" for="captionsToggle">Mostrar subtítulos por defecto</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2">
+        <a href="/dashboard" class="btn btn-light">Cancelar</a>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>

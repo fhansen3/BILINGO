@@ -1,0 +1,129 @@
+<%
+  function inviteeAt(i) {
+    if (!form || !form.invitees) return '';
+    return form.invitees[i] || '';
+  }
+%>
+
+<div class="d-flex" style="min-height: calc(100vh - 60px);">
+  <%- include('partials/main-sidebar', { user: user, active: 'schedule' }) %>
+
+  <div class="flex-grow-1 px-3 px-lg-4 py-3" style="min-width:0">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h1 class="h4 fw-bold mb-1"><i class="fa-solid fa-calendar-plus me-2 text-primary"></i>Programar reunión</h1>
+        <p class="text-muted small mb-0">Elige fecha y hora e invita hasta 5 personas por correo.</p>
+      </div>
+      <a href="/dashboard" class="btn btn-sm btn-outline-secondary">
+        <i class="fa-solid fa-arrow-left me-1"></i>Volver
+      </a>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-danger" role="alert">
+        <i class="fa-solid fa-circle-exclamation me-2"></i><%= error %>
+      </div>
+    <% } %>
+
+    <div class="card bm-shadow-sm">
+      <div class="card-body p-4">
+        <form method="post" action="/schedule" novalidate>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="title">Título de la reunión</label>
+            <input type="text" class="form-control" id="title" name="title"
+                   maxlength="120" required
+                   value="<%= form.title || '' %>"
+                   placeholder="p. ej. Sincronía semanal con el equipo de Berlín">
+          </div>
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="scheduledStart">Fecha y hora</label>
+              <input type="datetime-local" class="form-control" id="scheduledStart"
+                     name="scheduledStart" required
+                     value="<%= form.scheduledStart || '' %>">
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="languageFocus">Idioma principal (opcional)</label>
+              <input type="text" class="form-control" id="languageFocus"
+                     name="languageFocus" maxlength="50"
+                     value="<%= form.languageFocus || '' %>"
+                     placeholder="p. ej. es ↔ en">
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <label class="form-label fw-semibold" for="topic">Tema o agenda (opcional)</label>
+            <textarea class="form-control" id="topic" name="topic" rows="2" maxlength="150"
+                      placeholder="¿De qué hablaréis?"><%= form.topic || '' %></textarea>
+          </div>
+
+          <div class="row g-3 mt-1 align-items-end">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="durationLimitMin">
+                Duración máxima
+                <% if (user && user.plan === 'free') { %>
+                  <span class="badge text-bg-light border ms-1">Plan Free · máx. 60 min</span>
+                <% } %>
+              </label>
+              <select class="form-select" id="durationLimitMin" name="durationLimitMin"
+                      <%= (user && user.plan === 'free') ? 'disabled' : '' %>>
+                <% var dl = (form && form.durationLimitMin) || (user && user.plan === 'free' ? 60 : 0); %>
+                <option value="0"   <%= dl == 0 ? 'selected' : '' %>>Sin límite</option>
+                <option value="30"  <%= dl == 30 ? 'selected' : '' %>>30 minutos</option>
+                <option value="60"  <%= (dl == 60 || (user && user.plan === 'free')) ? 'selected' : '' %>>60 minutos</option>
+                <option value="90"  <%= dl == 90 ? 'selected' : '' %>>90 minutos</option>
+                <option value="120" <%= dl == 120 ? 'selected' : '' %>>120 minutos</option>
+              </select>
+              <% if (user && user.plan === 'free') { %>
+                <div class="form-text text-warning">
+                  <i class="fa-solid fa-lock me-1"></i>El plan Free limita cada reunión a 60 minutos.
+                </div>
+              <% } %>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="form-check form-switch mt-md-4">
+                <% var sav = (form && form.saveTranscript !== undefined) ? !!form.saveTranscript : true; %>
+                <input class="form-check-input" type="checkbox" role="switch"
+                       id="saveTranscript" name="saveTranscript" value="1"
+                       <%= sav ? 'checked' : '' %>>
+                <label class="form-check-label fw-semibold" for="saveTranscript">
+                  Guardar transcripción de la reunión
+                </label>
+                <div class="form-text">
+                  Si lo desactivas, no se podrá descargar la transcripción ni en el historial.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <div>
+            <label class="form-label fw-semibold mb-2">
+              <i class="fa-regular fa-envelope me-1"></i>Invitar por correo (hasta 5)
+            </label>
+            <div class="row g-2">
+              <% for (var i = 0; i < 5; i++) { %>
+                <div class="col-12 col-md-6">
+                  <input type="email" class="form-control form-control-sm"
+                         name="invitees[]" maxlength="190"
+                         value="<%= inviteeAt(i) %>"
+                         placeholder="persona<%= i+1 %>@empresa.com">
+                </div>
+              <% } %>
+            </div>
+            <div class="form-text">Los correos no se envían en este entorno; recibirán un enlace único con su token de invitación.</div>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <a href="/dashboard" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-calendar-check me-1"></i>Programar reunión
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

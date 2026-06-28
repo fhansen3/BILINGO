@@ -1,0 +1,238 @@
+<%
+  var m = meeting || {};
+  var partList = participants || [];
+  var pendingList = pending || [];
+
+  function initial(s) {
+    return (String(s||'?').trim().charAt(0) || '?').toUpperCase();
+  }
+  function colorForId(id) {
+    var palette = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316'];
+    return palette[((id || 0) % palette.length + palette.length) % palette.length];
+  }
+%>
+
+<div class="d-flex" style="min-height: calc(100vh - 60px);">
+  <%- include('partials/main-sidebar', { user: user, active: 'dashboard' }) %>
+
+  <div class="flex-grow-1 px-3 px-lg-4 py-3" style="min-width:0; max-width: 880px;">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <a href="/m/<%= m.room_code %>/room" class="btn btn-sm btn-outline-secondary">
+        <i class="fa-solid fa-arrow-left me-1"></i> Volver a la sala
+      </a>
+      <span class="badge text-bg-primary">
+        <i class="fa-solid fa-shield-halved me-1"></i> Controles del anfitrión
+      </span>
+    </div>
+
+    <h1 class="h4 fw-bold mb-1">
+      <%= m.name || ('Reunión ' + m.room_code) %>
+    </h1>
+    <div class="text-muted small mb-4">
+      Código <code><%= m.room_code %></code> · <%= partList.length %> participantes activos
+    </div>
+
+    <% if (typeof flash !== 'undefined' && flash) { %>
+      <div class="alert alert-<%= flash.type || 'info' %> py-2"><%= flash.msg %></div>
+    <% } %>
+
+    <!-- Meeting controls -->
+    <div class="card bm-shadow-sm mb-3">
+      <div class="card-body p-4">
+        <h2 class="h6 fw-bold mb-3">
+          <i class="fa-solid fa-sliders me-2 text-primary"></i>Reunión
+        </h2>
+
+        <form method="POST" action="/m/<%= m.room_code %>/host/lock" class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <div class="fw-semibold">Bloquear reunión</div>
+            <div class="text-muted small">Nadie más podrá unirse mientras esté bloqueada.</div>
+          </div>
+          <div class="form-check form-switch m-0">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   name="isLocked" value="1" id="lockSwitch"
+                   onchange="this.form.submit()"
+                   <%= m.is_locked ? 'checked' : '' %>>
+          </div>
+        </form>
+
+        <form method="POST" action="/m/<%= m.room_code %>/host/waiting-room" class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <div class="fw-semibold">Sala de espera</div>
+            <div class="text-muted small">Los invitados esperan tu aprobación para entrar.</div>
+          </div>
+          <div class="form-check form-switch m-0">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   name="waitingRoomEnabled" value="1" id="waitingSwitch"
+                   onchange="this.form.submit()"
+                   <%= m.waiting_room_enabled ? 'checked' : '' %>>
+          </div>
+        </form>
+
+        <hr class="my-3">
+
+        <div class="d-flex flex-column flex-md-row gap-2">
+          <form method="POST" action="/m/<%= m.room_code %>/host/mute-all" class="flex-grow-1 m-0">
+            <button type="submit" class="btn btn-outline-warning w-100">
+              <i class="fa-solid fa-microphone-slash me-1"></i> Silenciar a todos
+            </button>
+          </form>
+          <form method="POST" action="/m/<%= m.room_code %>/host/end" class="flex-grow-1 m-0"
+                onsubmit="return confirm('¿Finalizar la reunión para todos? Esta acción no se puede deshacer.');">
+            <button type="submit" class="btn btn-danger w-100">
+              <i class="fa-solid fa-phone-slash me-1"></i> Finalizar reunión para todos
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pending admissions -->
+    <div class="card bm-shadow-sm mb-3">
+      <div class="card-body p-4">
+        <h2 class="h6 fw-bold mb-3">
+          <i class="fa-solid fa-hourglass-half me-2 text-warning"></i>
+          Solicitudes de entrada
+          <span class="text-muted small fw-normal">(<%= pendingList.length %>)</span>
+        </h2>
+
+        <% if (!pendingList.length) { %>
+          <p class="text-muted small mb-0">No hay solicitudes pendientes.</p>
+        <% } else { %>
+          <ul class="list-group list-group-flush">
+            <% pendingList.forEach(function(pp){ %>
+              <li class="list-group-item px-0 d-flex align-items-center justify-content-between flex-wrap gap-2" data-pending-pid="<%= pp.id %>">
+                <div class="d-flex align-items-center gap-2 text-truncate">
+                  <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                       style="width:36px;height:36px;background:<%= colorForId(pp.id) %>">
+                    <%= initial(pp.display_name) %>
+                  </div>
+                  <div class="text-truncate">
+                    <div class="fw-semibold text-truncate"><%= pp.display_name %></div>
+                    <div class="text-muted small text-truncate">
+                      <%= (pp.native_language || '?').toUpperCase() %> → <%= (pp.target_language || '?').toUpperCase() %>
+                    </div>
+                  </div>
+                </div>
+                <div class="d-flex gap-2">
+                  <form method="POST" action="/m/<%= m.room_code %>/host/admit/<%= pp.id %>" class="m-0">
+                    <button type="submit" class="btn btn-sm btn-success">
+                      <i class="fa-solid fa-check me-1"></i>Admitir
+                    </button>
+                  </form>
+                  <form method="POST" action="/m/<%= m.room_code %>/host/deny/<%= pp.id %>" class="m-0">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                      <i class="fa-solid fa-xmark me-1"></i>Denegar
+                    </button>
+                  </form>
+                </div>
+              </li>
+            <% }); %>
+          </ul>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Active participants -->
+    <div class="card bm-shadow-sm">
+      <div class="card-body p-4">
+        <h2 class="h6 fw-bold mb-3">
+          <i class="fa-solid fa-users me-2 text-primary"></i>
+          Participantes
+          <span class="text-muted small fw-normal">(<%= partList.length %>)</span>
+        </h2>
+
+        <% if (!partList.length) { %>
+          <p class="text-muted small mb-0">Todavía no hay participantes admitidos.</p>
+        <% } else { %>
+          <ul class="list-group list-group-flush">
+            <% partList.forEach(function(pp){ %>
+              <li class="list-group-item px-0 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 text-truncate">
+                  <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                       style="width:36px;height:36px;background:<%= colorForId(pp.id) %>">
+                    <%= initial(pp.display_name) %>
+                  </div>
+                  <div class="text-truncate">
+                    <div class="fw-semibold text-truncate">
+                      <%= pp.display_name %>
+                      <% if (pp.user_id === m.host_id) { %>
+                        <span class="badge text-bg-primary ms-1">Anfitrión</span>
+                      <% } %>
+                    </div>
+                    <div class="text-muted small text-truncate">
+                      <%= (pp.native_language || '?').toUpperCase() %> → <%= (pp.target_language || '?').toUpperCase() %>
+                    </div>
+                  </div>
+                </div>
+                <div class="d-flex gap-2">
+                  <form method="POST" action="/m/<%= m.room_code %>/host/mute/<%= pp.id %>" class="m-0">
+                    <button type="submit" class="btn btn-sm btn-outline-warning"
+                            <%= pp.user_id === m.host_id ? 'disabled' : '' %>>
+                      <i class="fa-solid fa-microphone-slash me-1"></i>Silenciar
+                    </button>
+                  </form>
+                  <form method="POST" action="/m/<%= m.room_code %>/host/remove/<%= pp.id %>" class="m-0"
+                        onsubmit="return confirm('¿Expulsar a <%= pp.display_name.replace(/'/g, "\\'") %> de la reunión?');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                            <%= pp.user_id === m.host_id ? 'disabled' : '' %>>
+                      <i class="fa-solid fa-user-slash me-1"></i>Expulsar
+                    </button>
+                  </form>
+                </div>
+              </li>
+            <% }); %>
+          </ul>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(function() {
+  if (!window.io) return;
+  var roomCode = <%- JSON.stringify(m.room_code) %>;
+  var socket;
+  try {
+    socket = window.io({ path: '/socket.io', transports: ['polling'], upgrade: false });
+  } catch (e) { return; }
+
+  socket.on('connect', function() {
+    socket.emit('host:watch', { roomCode: roomCode });
+  });
+  socket.on('host:error', function(err) {
+    console.warn('[host:error]', err && err.message);
+  });
+
+  // Initial snapshot of pending participants (we already rendered server-side,
+  // but use the snapshot to detect divergence and reload if needed).
+  socket.on('waiting:list', function(payload) {
+    var serverCount = (payload && Array.isArray(payload.pending)) ? payload.pending.length : 0;
+    var domCount = document.querySelectorAll('[data-pending-pid]').length;
+    // Also accept the rendered fallback count by re-reading from the rendered count badge.
+    if (serverCount !== domCount) {
+      // mismatch — reload to get the authoritative state
+      setTimeout(function() { window.location.reload(); }, 250);
+    }
+  });
+
+  // Live updates: a new participant entered the waiting room.
+  socket.on('waiting:join', function(payload) {
+    // Simple, robust strategy: reload after a short debounce so the EJS list
+    // re-renders. (We're already throttled by the page being host-only.)
+    debounceReload();
+  });
+  // A waiter was admitted, denied, or disconnected.
+  socket.on('waiting:leave', function(payload) {
+    debounceReload();
+  });
+
+  var reloadTimer = null;
+  function debounceReload() {
+    if (reloadTimer) return;
+    reloadTimer = setTimeout(function() { window.location.reload(); }, 500);
+  }
+})();
+</script>

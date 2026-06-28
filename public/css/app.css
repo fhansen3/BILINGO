@@ -1,0 +1,123 @@
+/* BiLingo Meet — design system (server-rendered EJS layout) */
+:root {
+  --bm-primary: #4F46E5;
+  --bm-primary-hover: #4338CA;
+  --bm-primary-soft: #EEF2FF;
+  --bm-bg: #F8FAFC;
+  --bm-surface: #FFFFFF;
+  --bm-text: #0F172A;
+  --bm-text-muted: #64748B;
+  --bm-border: #E2E8F0;
+  --bm-success: #10B981;
+  --bm-warning: #F59E0B;
+  --bm-danger: #EF4444;
+}
+
+html, body {
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bm-bg);
+  color: var(--bm-text);
+  /* NO gradients — flat surfaces only */
+}
+
+a { color: var(--bm-primary); }
+a:hover { color: var(--bm-primary-hover); }
+
+/* Bootstrap primary override (indigo, flat, no gradient) */
+.btn-primary {
+  background-color: var(--bm-primary);
+  border-color: var(--bm-primary);
+  background-image: none;
+}
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active {
+  background-color: var(--bm-primary-hover) !important;
+  border-color: var(--bm-primary-hover) !important;
+  background-image: none !important;
+}
+.btn-outline-primary {
+  color: var(--bm-primary);
+  border-color: var(--bm-primary);
+}
+.btn-outline-primary:hover {
+  background-color: var(--bm-primary);
+  border-color: var(--bm-primary);
+}
+.text-primary { color: var(--bm-primary) !important; }
+.bg-primary { background-color: var(--bm-primary) !important; background-image: none !important; }
+.bg-primary-soft { background-color: var(--bm-primary-soft); }
+.border-primary { border-color: var(--bm-primary) !important; }
+
+/* Cards & surfaces — flat */
+.card {
+  border: 1px solid var(--bm-border);
+  background: var(--bm-surface);
+  background-image: none;
+}
+
+/* Top public navbar */
+.bm-navbar {
+  background: var(--bm-surface);
+  border-bottom: 1px solid var(--bm-border);
+  background-image: none;
+}
+.bm-navbar .navbar-brand {
+  font-weight: 800;
+  color: var(--bm-primary);
+}
+.bm-navbar .nav-link {
+  color: var(--bm-text);
+  font-weight: 500;
+}
+.bm-navbar .nav-link:hover { color: var(--bm-primary); }
+
+/* App sidebar */
+.bm-sidebar {
+  background: var(--bm-surface);
+  border-right: 1px solid var(--bm-border);
+  min-height: 100vh;
+  width: 240px;
+}
+.bm-sidebar .nav-link {
+  color: var(--bm-text);
+  border-radius: .5rem;
+  margin-bottom: .25rem;
+}
+.bm-sidebar .nav-link.active,
+.bm-sidebar .nav-link:hover {
+  background: var(--bm-primary-soft);
+  color: var(--bm-primary);
+}
+
+/* App topbar (logged-in) */
+.bm-topbar {
+  background: var(--bm-surface);
+  border-bottom: 1px solid var(--bm-border);
+  height: 60px;
+}
+
+/* Admin subnav */
+.bm-subnav {
+  background: var(--bm-surface);
+  border-bottom: 1px solid var(--bm-border);
+}
+.bm-subnav .nav-link {
+  color: var(--bm-text-muted);
+  font-weight: 500;
+}
+.bm-subnav .nav-link.active {
+  color: var(--bm-primary);
+  border-bottom: 2px solid var(--bm-primary);
+}
+
+/* Auth back link */
+.bm-auth-back {
+  color: var(--bm-text-muted);
+  text-decoration: none;
+  font-weight: 500;
+}
+.bm-auth-back:hover { color: var(--bm-primary); }
+
+/* Utility */
+.bm-shadow-sm { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06); }

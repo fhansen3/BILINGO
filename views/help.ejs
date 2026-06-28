@@ -1,0 +1,90 @@
+<div class="row g-4">
+  <aside class="col-lg-3">
+    <div class="card bm-shadow-sm p-3 sticky-top" style="top: 1rem;">
+      <h6 class="fw-bold text-uppercase text-muted small mb-3">
+        <i class="fa-solid fa-list me-1"></i> En esta página
+      </h6>
+      <nav class="nav flex-column small">
+        <a class="nav-link px-0 py-1" href="#pipeline"><i class="fa-solid fa-route me-1 text-primary"></i> Pipeline de traducción</a>
+        <a class="nav-link px-0 py-1" href="#latency"><i class="fa-solid fa-gauge-high me-1 text-primary"></i> Latencia</a>
+        <a class="nav-link px-0 py-1" href="#privacy"><i class="fa-solid fa-shield-halved me-1 text-primary"></i> Privacidad</a>
+        <a class="nav-link px-0 py-1" href="#faq"><i class="fa-solid fa-circle-question me-1 text-primary"></i> Preguntas frecuentes</a>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="col-lg-9">
+    <header class="mb-4">
+      <h1 class="fw-bold mb-2">Centro de ayuda</h1>
+      <p class="text-muted mb-0">Todo lo que necesitas saber sobre cómo BiLingo Meet traduce tus conversaciones.</p>
+    </header>
+
+    <section id="pipeline" class="card bm-shadow-sm p-4 mb-4">
+      <h3 class="fw-bold mb-3"><i class="fa-solid fa-route text-primary me-2"></i> Pipeline de traducción</h3>
+      <p>Cuando envías un mensaje en una sala de BiLingo Meet, este recorre un camino de varios pasos antes de aparecer en pantalla de tus compañeros:</p>
+      <ol>
+        <li><strong>Captura:</strong> escribes el mensaje en tu idioma nativo en el panel de chat.</li>
+        <li><strong>Detección:</strong> el sistema confirma el idioma de origen a partir de tu perfil.</li>
+        <li><strong>Traducción:</strong> el motor traduce el mensaje a cada uno de los idiomas activos en la sala.</li>
+        <li><strong>Entrega:</strong> cada participante recibe la versión en su idioma preferido vía WebSocket.</li>
+        <li><strong>Historial:</strong> todas las variantes se guardan para que el contexto no se pierda.</li>
+      </ol>
+      <p class="mb-0 text-muted small">El mensaje original siempre queda registrado junto a sus traducciones — la traducción nunca reemplaza, solo complementa.</p>
+    </section>
+
+    <section id="latency" class="card bm-shadow-sm p-4 mb-4">
+      <h3 class="fw-bold mb-3"><i class="fa-solid fa-gauge-high text-primary me-2"></i> Latencia</h3>
+      <p>Optimizamos cada paso para que la conversación se sienta natural:</p>
+      <ul>
+        <li><strong>Video WebRTC:</strong> conexión peer-to-peer, normalmente por debajo de 150 ms entre participantes en la misma región.</li>
+        <li><strong>Chat traducido:</strong> entre 300 ms y 1 s desde que envías el mensaje hasta que aparece traducido al otro lado.</li>
+        <li><strong>Señalización:</strong> usamos WebSockets persistentes para evitar el coste de reconectar en cada mensaje.</li>
+      </ul>
+      <p class="mb-0">Si notas retrasos, revisa tu conexión y cierra otras pestañas que estén usando la cámara.</p>
+    </section>
+
+    <section id="privacy" class="card bm-shadow-sm p-4 mb-4">
+      <h3 class="fw-bold mb-3"><i class="fa-solid fa-shield-halved text-primary me-2"></i> Privacidad</h3>
+      <ul>
+        <li>Tu video y audio viajan <strong>peer-to-peer</strong> cifrados — nuestros servidores no los almacenan.</li>
+        <li>Los mensajes de chat se guardan asociados a la sala para el historial; puedes borrarlos al cerrar la reunión.</li>
+        <li>Las traducciones se procesan con servicios bajo contrato; no se usan para entrenar modelos públicos.</li>
+        <li>Solo los participantes invitados con el código de sala pueden unirse.</li>
+      </ul>
+      <p class="mb-0 small text-muted">Consulta la política completa contactando con el administrador del espacio de trabajo.</p>
+    </section>
+
+    <section id="faq" class="card bm-shadow-sm p-4 mb-4">
+      <h3 class="fw-bold mb-3"><i class="fa-solid fa-circle-question text-primary me-2"></i> Preguntas frecuentes</h3>
+
+      <div class="mb-3">
+        <h6 class="fw-bold mb-1">¿Necesito instalar algo?</h6>
+        <p class="text-muted mb-0">No. BiLingo Meet funciona en navegadores modernos (Chrome, Edge, Firefox, Safari) sin instalación.</p>
+      </div>
+
+      <div class="mb-3">
+        <h6 class="fw-bold mb-1">¿Cuántas personas pueden unirse a una sala?</h6>
+        <p class="text-muted mb-0">Las salas estándar admiten hasta 8 participantes con video activo simultáneo.</p>
+      </div>
+
+      <div class="mb-3">
+        <h6 class="fw-bold mb-1">¿Qué idiomas están soportados?</h6>
+        <p class="text-muted mb-0">Más de 30 idiomas, incluyendo español, inglés, francés, alemán, portugués, italiano, japonés, coreano y chino mandarín.</p>
+      </div>
+
+      <div class="mb-3">
+        <h6 class="fw-bold mb-1">¿Puedo cambiar mi idioma preferido durante una reunión?</h6>
+        <p class="text-muted mb-0">Sí, desde tu perfil. Los nuevos mensajes te llegarán traducidos al idioma actualizado.</p>
+      </div>
+
+      <div class="mb-0">
+        <h6 class="fw-bold mb-1">¿Y si la traducción no es perfecta?</h6>
+        <p class="text-muted mb-0">El mensaje original siempre está disponible al pasar el ratón sobre el texto traducido, por si quieres ver el matiz exacto.</p>
+      </div>
+    </section>
+
+    <div class="text-center pt-3">
+      <a class="btn btn-outline-primary" href="/"><i class="fa-solid fa-arrow-left me-1"></i> Volver al inicio</a>
+    </div>
+  </div>
+</div>

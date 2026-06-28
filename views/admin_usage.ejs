@@ -1,0 +1,139 @@
+<%- include('partials/admin-subnav', { active: 'usage' }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1">Uso y rendimiento</h1>
+    <p class="text-muted mb-0">Métricas globales de la plataforma y feedback reciente.</p>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small">Reuniones totales</div>
+        <div class="display-6 fw-bold"><%= kpi.totalMeetings %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small">Minutos de traducción</div>
+        <div class="display-6 fw-bold"><%= kpi.translationMinutes %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small">Latencia media</div>
+        <div class="display-6 fw-bold"><%= kpi.avgLatencyMs %><span class="fs-6 text-muted"> ms</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small">Valoración media</div>
+        <div class="display-6 fw-bold"><%= kpi.avgRating %><span class="fs-6 text-muted"> / 5</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-header bg-white"><strong>Latencia en el tiempo (últimos 14 días)</strong></div>
+      <div class="card-body">
+        <canvas id="chartLatency" height="120"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-white"><strong>Pares de idiomas más usados</strong></div>
+      <div class="card-body">
+        <canvas id="chartPairs" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header bg-white"><strong>Feedback reciente</strong></div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Sala</th>
+          <th>Usuario</th>
+          <th>Traducción</th>
+          <th>Audio</th>
+          <th>Comentarios</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (feedback || []).forEach(function(f){ %>
+          <tr>
+            <td class="text-muted small"><%= f.created_at ? new Date(f.created_at).toISOString().replace('T',' ').slice(0,16) : '' %></td>
+            <td><code><%= f.room_code || ('#' + f.room_id) %></code></td>
+            <td><%= f.user_name || '—' %></td>
+            <td>
+              <% for (var i=1;i<=5;i++) { %><i class="fa-<%= i <= (f.translation_quality||0) ? 'solid' : 'regular' %> fa-star <%= i <= (f.translation_quality||0) ? 'text-warning' : 'text-muted' %>"></i><% } %>
+            </td>
+            <td>
+              <% for (var i=1;i<=5;i++) { %><i class="fa-<%= i <= (f.audio_quality||0) ? 'solid' : 'regular' %> fa-star <%= i <= (f.audio_quality||0) ? 'text-warning' : 'text-muted' %>"></i><% } %>
+            </td>
+            <td class="small"><%= f.comments || '' %></td>
+          </tr>
+        <% }) %>
+        <% if (!feedback || !feedback.length) { %><tr><td colspan="6" class="text-center text-muted py-3">Sin feedback.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  var latencyData = <%- JSON.stringify(latencyChart || {labels:[], values:[]}) %>;
+  var pairsData = <%- JSON.stringify(pairsChart || {labels:[], values:[]}) %>;
+
+  var ctx1 = document.getElementById('chartLatency');
+  if (ctx1 && window.Chart) {
+    new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: latencyData.labels,
+        datasets: [{
+          label: 'Latencia media (ms)',
+          data: latencyData.values,
+          borderColor: '#1CB0F6',
+          backgroundColor: 'rgba(28,176,246,0.15)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+  }
+
+  var ctx2 = document.getElementById('chartPairs');
+  if (ctx2 && window.Chart) {
+    new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: pairsData.labels,
+        datasets: [{
+          data: pairsData.values,
+          backgroundColor: ['#58CC02','#1CB0F6','#FF9600','#CE82FF','#FF4B4B','#FFC800','#2B70C9']
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+})();
+</script>

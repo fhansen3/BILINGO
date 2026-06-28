@@ -1,0 +1,169 @@
+<%
+  var m = meeting || {};
+  var msgs = messages || [];
+  var parts = participants || [];
+
+  function fmtDate(d) {
+    if (!d) return '—';
+    var dt = new Date(d);
+    if (isNaN(dt.getTime())) return '—';
+    return dt.toLocaleString('es-ES', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+  function fmtTime(d) {
+    if (!d) return '';
+    var dt = new Date(d);
+    if (isNaN(dt.getTime())) return '';
+    return dt.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  }
+  function fmtDuration(s) {
+    if (!s || s <= 0) return '—';
+    var h = Math.floor(s / 3600);
+    var min = Math.floor((s % 3600) / 60);
+    if (h > 0) return h + 'h ' + min + 'min';
+    return min + ' min';
+  }
+  function parseTranslations(raw, fallbackLang, fallbackText) {
+    // Either the column already holds a single translated string, or
+    // (preferred) a JSON dict { "en": "...", "es": "..." }.
+    if (raw == null) return {};
+    if (typeof raw === 'object') return raw;
+    var s = String(raw).trim();
+    if (!s) return {};
+    if (s.charAt(0) === '{' || s.charAt(0) === '[') {
+      try { return JSON.parse(s); } catch (e) { /* fallthrough */ }
+    }
+    var k = fallbackLang || 'translated';
+    var o = {}; o[k] = s; return o;
+  }
+%>
+
+<div class="d-flex" style="min-height: calc(100vh - 60px);">
+  <%- include('partials/main-sidebar', { user: user, active: 'history' }) %>
+
+  <div class="flex-grow-1 px-3 px-lg-4 py-3" style="min-width:0">
+    <div class="mb-3">
+      <a href="/history" class="text-decoration-none small text-muted">
+        <i class="fa-solid fa-arrow-left me-1"></i> Volver al historial
+      </a>
+    </div>
+
+    <div class="card bm-shadow-sm mb-3">
+      <div class="card-body">
+        <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+          <div>
+            <h1 class="h4 fw-bold mb-1"><%= m.name || ('Sala ' + m.room_code) %></h1>
+            <div class="text-muted small">
+              Código <code><%= m.room_code %></code>
+              <% if (m.topic) { %> · <%= m.topic %><% } %>
+              · <%= fmtDate(m.ended_at || m.started_at || m.created_at) %>
+              · Duración <%= fmtDuration(m.duration_seconds) %>
+            </div>
+          </div>
+          <% if (m.save_transcript) { %>
+            <div class="d-flex gap-2">
+              <a href="/m/<%= m.room_code %>/transcript.txt" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-file-lines me-1"></i> .txt
+              </a>
+              <a href="/m/<%= m.room_code %>/transcript.json" class="btn btn-outline-secondary btn-sm">
+                <i class="fa-solid fa-file-code me-1"></i> .json
+              </a>
+            </div>
+          <% } else { %>
+            <span class="text-muted small">
+              <i class="fa-solid fa-lock me-1"></i> Transcripción no guardada
+            </span>
+          <% } %>
+        </div>
+
+        <% if (parts.length) { %>
+          <div class="mb-1 text-muted small"><i class="fa-solid fa-users me-1"></i> Participantes</div>
+          <div class="d-flex flex-wrap gap-2 mb-2">
+            <% parts.forEach(function(p){ %>
+              <span class="badge text-bg-light border">
+                <i class="fa-solid fa-user me-1 text-muted"></i><%= p.display_name %>
+                <% if (p.native_language) { %><span class="text-muted ms-1">· <%= p.native_language %></span><% } %>
+              </span>
+            <% }); %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card bm-shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 fw-bold mb-3"><i class="fa-solid fa-language me-2 text-primary"></i>Transcripción bilingüe</h2>
+
+        <% if (typeof redact !== 'undefined' && redact) { %>
+          <div class="alert alert-warning d-flex align-items-start gap-2 small mb-3">
+            <i class="fa-solid fa-shield-halved mt-1"></i>
+            <div>
+              <% if (!m.save_transcript) { %>
+                Esta reunión se realizó con <strong>transcripción desactivada</strong>: solo se muestran los metadatos (quién habló, cuándo y en qué idioma). El texto no fue guardado.
+              <% } else { %>
+                Vista de administración: por privacidad, el texto original y las traducciones están ocultos. Solo se muestran los metadatos.
+              <% } %>
+            </div>
+          </div>
+        <% } %>
+        <% if (!msgs.length) { %>
+          <div class="text-center py-5 text-muted">
+            <i class="fa-regular fa-comment fs-2 mb-2 d-block"></i>
+            <p class="mb-0">No se registraron mensajes en esta reunión.</p>
+          </div>
+        <% } else { %>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead class="text-muted small">
+                <tr>
+                  <th style="width:120px">Hora</th>
+                  <th style="width:160px">Hablante</th>
+                  <th>Texto original</th>
+                  <th>Traducciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% msgs.forEach(function(msg){
+                     var isRedacted = msg.redacted || (typeof redact !== 'undefined' && redact);
+                     var translations = isRedacted ? {} : parseTranslations(msg.translated_content, msg.target_lang, '');
+                     var transKeys = Object.keys(translations || {});
+                %>
+                  <tr>
+                    <td class="text-muted small font-monospace"><%= fmtTime(msg.created_at) %></td>
+                    <td>
+                      <div class="fw-semibold small"><%= msg.display_name || ('Usuario ' + msg.user_id) %></div>
+                      <% if (msg.source_lang) { %><div class="text-muted" style="font-size:0.75rem"><%= msg.source_lang %></div><% } %>
+                    </td>
+                    <td>
+                      <% if (isRedacted) { %>
+                        <span class="text-muted small fst-italic">
+                          <i class="fa-solid fa-lock me-1"></i>oculto
+                          <% if (msg.original_length) { %> · <%= msg.original_length %> car.<% } %>
+                        </span>
+                      <% } else { %>
+                        <%= msg.content %>
+                      <% } %>
+                    </td>
+                    <td>
+                      <% if (isRedacted) { %>
+                        <span class="text-muted small fst-italic"><i class="fa-solid fa-lock me-1"></i>oculto</span>
+                      <% } else if (!transKeys.length) { %>
+                        <span class="text-muted small">—</span>
+                      <% } else { %>
+                        <% transKeys.forEach(function(k){ %>
+                          <div class="mb-1">
+                            <span class="badge text-bg-info me-1"><%= k %></span>
+                            <%= translations[k] %>
+                          </div>
+                        <% }); %>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>

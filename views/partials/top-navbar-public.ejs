@@ -1,0 +1,26 @@
+<nav class="navbar navbar-expand-lg bm-navbar">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+      <span style="font-size:1.5rem">🦜</span>
+      <span>BiLingo Meet</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#bmPublicNav" aria-controls="bmPublicNav" aria-expanded="false" aria-label="Alternar navegación">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="bmPublicNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="/#features"><i class="fa-solid fa-bolt me-1"></i> Funciones</a></li>
+        <li class="nav-item"><a class="nav-link" href="/#how-it-works"><i class="fa-solid fa-route me-1"></i> Cómo funciona</a></li>
+        <li class="nav-item"><a class="nav-link" href="/#pricing"><i class="fa-solid fa-tag me-1"></i> Precio</a></li>
+      </ul>
+      <div class="d-flex gap-2">
+        <% if (typeof user !== 'undefined' && user) { %>
+          <a class="btn btn-outline-primary" href="/app"><i class="fa-solid fa-house me-1"></i> Mi panel</a>
+        <% } else { %>
+          <a class="btn btn-outline-primary" href="/#/login"><i class="fa-solid fa-right-to-bracket me-1"></i> Entrar</a>
+          <a class="btn btn-primary" href="/#/register"><i class="fa-solid fa-user-plus me-1"></i> Crear cuenta</a>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</nav>

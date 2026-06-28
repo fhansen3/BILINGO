@@ -1,0 +1,91 @@
+<section class="text-center py-5">
+  <span class="badge bg-primary-soft text-primary mb-3 px-3 py-2">
+    <i class="fa-solid fa-globe me-1"></i> Reuniones sin barreras de idioma
+  </span>
+  <h1 class="display-4 fw-bold mb-3">
+    Habla tu idioma. <br>
+    <span class="text-primary">Entiéndete con cualquiera.</span>
+  </h1>
+  <p class="lead text-muted mb-4 mx-auto" style="max-width: 640px;">
+    Videollamadas grupales con chat traducido en tiempo real. Cada participante escribe en su lengua materna; el resto lo lee en la suya.
+  </p>
+  <div class="d-flex justify-content-center gap-2 flex-wrap">
+    <a class="btn btn-primary btn-lg" href="/#/room/new">
+      <i class="fa-solid fa-video me-1"></i> Iniciar una reunión
+    </a>
+    <a class="btn btn-outline-primary btn-lg" href="/#/register">
+      <i class="fa-solid fa-user-plus me-1"></i> Crear cuenta gratis
+    </a>
+  </div>
+</section>
+
+<section class="py-4">
+  <div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+      <div class="card bm-shadow-sm p-4">
+        <h5 class="fw-bold mb-3 text-center">
+          <i class="fa-solid fa-door-open text-primary me-2"></i>
+          ¿Te invitaron a una reunión?
+        </h5>
+        <% if (typeof joinError !== 'undefined' && joinError) { %>
+          <div class="alert alert-danger small py-2 mb-3">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i> <%= joinError %>
+          </div>
+        <% } %>
+        <form action="/join" method="post" class="d-flex gap-2 flex-wrap flex-md-nowrap">
+          <input
+            type="text"
+            name="code"
+            class="form-control form-control-lg text-center text-uppercase"
+            placeholder="Código de reunión"
+            maxlength="12"
+            autocomplete="off"
+            required
+            style="letter-spacing: 0.2em; font-weight: 600;"
+          >
+          <button type="submit" class="btn btn-primary btn-lg flex-shrink-0">
+            <i class="fa-solid fa-arrow-right-to-bracket me-1"></i> Unirme
+          </button>
+        </form>
+        <p class="text-muted small text-center mt-3 mb-0">
+          ¿No tienes un código? <a href="/#/register">Crea una cuenta</a> para iniciar tu propia reunión.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="py-5">
+  <h2 class="text-center fw-bold mb-5">Una sala. Cualquier idioma.</h2>
+  <div class="row g-4">
+    <div class="col-md-4">
+      <div class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-language"></i></div>
+        <h5 class="fw-bold">Chat traducido en vivo</h5>
+        <p class="text-muted mb-0">Cada mensaje llega al destinatario en su idioma preferido, instantáneamente — sin copiar, pegar ni esperar.</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-video"></i></div>
+        <h5 class="fw-bold">Video WebRTC seguro</h5>
+        <p class="text-muted mb-0">Salas con un clic, sin instalar nada. Conexión cifrada de extremo a extremo entre participantes.</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-user-group"></i></div>
+        <h5 class="fw-bold">Equipos globales</h5>
+        <p class="text-muted mb-0">Pensado para reuniones de trabajo entre personas de distintas lenguas y zonas horarias.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" class="py-5 text-center">
+  <h2 class="fw-bold mb-3">¿Curioso sobre la magia?</h2>
+  <p class="text-muted mb-4">Descubre cómo el pipeline de traducción mantiene tu conversación fluida en milisegundos.</p>
+  <a class="btn btn-outline-primary btn-lg" href="/help#pipeline">
+    <i class="fa-solid fa-route me-1"></i> Cómo funciona la traducción
+  </a>
+</section>
