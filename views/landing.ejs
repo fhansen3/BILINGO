@@ -7,15 +7,22 @@
     <span class="text-primary">Entiéndete con cualquiera.</span>
   </h1>
   <p class="lead text-muted mb-4 mx-auto" style="max-width: 640px;">
-    Videollamadas grupales con chat traducido en tiempo real. Cada participante escribe en su lengua materna; el resto lo lee en la suya.
+    Videollamadas grupales con traducción en tiempo real. Cada participante habla y escribe en su lengua materna; el resto lo escucha y lo lee en la suya. Gratis, sin instalar nada.
   </p>
   <div class="d-flex justify-content-center gap-2 flex-wrap">
-    <a class="btn btn-primary btn-lg" href="/#/room/new">
+    <a class="btn btn-primary btn-lg" href="#/room/new">
       <i class="fa-solid fa-video me-1"></i> Iniciar una reunión
     </a>
-    <a class="btn btn-outline-primary btn-lg" href="/#/register">
+    <a class="btn btn-outline-primary btn-lg" href="#/register">
       <i class="fa-solid fa-user-plus me-1"></i> Crear cuenta gratis
     </a>
+  </div>
+  <div class="mt-3">
+    <small class="text-muted">
+      <i class="fa-solid fa-circle-check text-success me-1"></i> 100% gratis ·
+      <i class="fa-solid fa-circle-check text-success me-1"></i> 30+ idiomas ·
+      <i class="fa-solid fa-circle-check text-success me-1"></i> Sin descargas
+    </small>
   </div>
 </section>
 
@@ -23,16 +30,16 @@
   <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
       <div class="card bm-shadow-sm p-4">
-        <h5 class="fw-bold mb-3 text-center">
+        <h2 class="h5 fw-bold mb-3 text-center">
           <i class="fa-solid fa-door-open text-primary me-2"></i>
           ¿Te invitaron a una reunión?
-        </h5>
+        </h2>
         <% if (typeof joinError !== 'undefined' && joinError) { %>
           <div class="alert alert-danger small py-2 mb-3">
             <i class="fa-solid fa-triangle-exclamation me-1"></i> <%= joinError %>
           </div>
         <% } %>
-        <form action="/join" method="post" class="d-flex gap-2 flex-wrap flex-md-nowrap">
+        <form action="join" method="post" class="d-flex gap-2 flex-wrap flex-md-nowrap">
           <input
             type="text"
             name="code"
@@ -41,6 +48,7 @@
             maxlength="12"
             autocomplete="off"
             required
+            aria-label="Código de reunión"
             style="letter-spacing: 0.2em; font-weight: 600;"
           >
           <button type="submit" class="btn btn-primary btn-lg flex-shrink-0">
@@ -48,7 +56,7 @@
           </button>
         </form>
         <p class="text-muted small text-center mt-3 mb-0">
-          ¿No tienes un código? <a href="/#/register">Crea una cuenta</a> para iniciar tu propia reunión.
+          ¿No tienes un código? <a href="#/register">Crea una cuenta</a> para iniciar tu propia reunión.
         </p>
       </div>
     </div>
@@ -59,33 +67,58 @@
   <h2 class="text-center fw-bold mb-5">Una sala. Cualquier idioma.</h2>
   <div class="row g-4">
     <div class="col-md-4">
-      <div class="card h-100 p-4 bm-shadow-sm">
+      <article class="card h-100 p-4 bm-shadow-sm">
         <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-language"></i></div>
-        <h5 class="fw-bold">Chat traducido en vivo</h5>
-        <p class="text-muted mb-0">Cada mensaje llega al destinatario en su idioma preferido, instantáneamente — sin copiar, pegar ni esperar.</p>
-      </div>
+        <h3 class="h5 fw-bold">Traducción de voz en vivo</h3>
+        <p class="text-muted mb-0">Cada participante escucha al resto en su propio idioma, con voz natural y baja latencia — sin esperar, sin leer subtítulos.</p>
+      </article>
     </div>
     <div class="col-md-4">
-      <div class="card h-100 p-4 bm-shadow-sm">
+      <article class="card h-100 p-4 bm-shadow-sm">
         <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-video"></i></div>
-        <h5 class="fw-bold">Video WebRTC seguro</h5>
-        <p class="text-muted mb-0">Salas con un clic, sin instalar nada. Conexión cifrada de extremo a extremo entre participantes.</p>
-      </div>
+        <h3 class="h5 fw-bold">Video WebRTC seguro</h3>
+        <p class="text-muted mb-0">Salas con un clic, sin instalar nada. Conexión cifrada entre participantes desde el navegador.</p>
+      </article>
     </div>
     <div class="col-md-4">
-      <div class="card h-100 p-4 bm-shadow-sm">
+      <article class="card h-100 p-4 bm-shadow-sm">
         <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-user-group"></i></div>
-        <h5 class="fw-bold">Equipos globales</h5>
-        <p class="text-muted mb-0">Pensado para reuniones de trabajo entre personas de distintas lenguas y zonas horarias.</p>
-      </div>
+        <h3 class="h5 fw-bold">Equipos globales</h3>
+        <p class="text-muted mb-0">Pensado para reuniones de trabajo entre personas de distintas lenguas y zonas horarias, sin descargar nada.</p>
+      </article>
     </div>
+  </div>
+</section>
+
+<section id="languages" class="py-5">
+  <h2 class="text-center fw-bold mb-3">30+ idiomas soportados</h2>
+  <p class="text-center text-muted mb-4 mx-auto" style="max-width:640px;">
+    Inglés, español, portugués, francés, alemán, italiano, chino, japonés, coreano, árabe, ruso, hindi, holandés, polaco, turco y más.
+  </p>
+  <div class="d-flex flex-wrap justify-content-center gap-2">
+    <span class="badge bg-light text-dark border px-3 py-2">🇬🇧 English</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇪🇸 Español</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇵🇹 Português</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇫🇷 Français</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇩🇪 Deutsch</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇮🇹 Italiano</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇨🇳 中文</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇯🇵 日本語</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇰🇷 한국어</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇸🇦 العربية</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇷🇺 Русский</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇮🇳 हिन्दी</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇳🇱 Nederlands</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇵🇱 Polski</span>
+    <span class="badge bg-light text-dark border px-3 py-2">🇹🇷 Türkçe</span>
+    <span class="badge bg-primary px-3 py-2">+15 más</span>
   </div>
 </section>
 
 <section id="how-it-works" class="py-5 text-center">
   <h2 class="fw-bold mb-3">¿Curioso sobre la magia?</h2>
   <p class="text-muted mb-4">Descubre cómo el pipeline de traducción mantiene tu conversación fluida en milisegundos.</p>
-  <a class="btn btn-outline-primary btn-lg" href="/help#pipeline">
+  <a class="btn btn-outline-primary btn-lg" href="help#pipeline">
     <i class="fa-solid fa-route me-1"></i> Cómo funciona la traducción
   </a>
 </section>

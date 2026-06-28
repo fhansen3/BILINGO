@@ -22,6 +22,7 @@ const { hashPassword, verifyPassword } = require('../utils/hash');
 const AVATAR_COLORS = ['#58CC02', '#1CB0F6', '#FF9600', '#CE82FF', '#FF4B4B', '#FFC800', '#2B70C9', '#4F46E5'];
 const DELIVERY_MODES = ['voice', 'text', 'both'];
 const VOICE_GENDERS = ['', 'male', 'female', 'neutral']; // '' = no preference
+const VALID_VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin', 'cedar'];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -161,6 +162,11 @@ router.post('/profile', requireAuth, async (req, res, next) => {
     if (!VOICE_GENDERS.includes(nativeGender)) nativeGender = '';
     if (!VOICE_GENDERS.includes(targetGender)) targetGender = '';
 
+    let preferredVoice = String(body.preferredVoice || body.preferred_voice || '').trim().toLowerCase();
+    if (preferredVoice && !VALID_VOICES.includes(preferredVoice)) preferredVoice = '';
+    // '' (cadena vacía) significa "automática por género" → guardamos NULL
+    const preferredVoiceDb = preferredVoice || null;
+
     let deliveryMode = String(body.defaultDeliveryMode || body.default_delivery_mode || 'both').trim().toLowerCase();
     if (!DELIVERY_MODES.includes(deliveryMode)) deliveryMode = 'both';
 
@@ -222,6 +228,7 @@ router.post('/profile', requireAuth, async (req, res, next) => {
          country = ?,
          native_language = ?,
          learning_language = ?,
+         preferred_voice = ?,
          default_native_voice_gender = ?,
          default_target_voice_gender = ?,
          default_delivery_mode = ?,
@@ -235,6 +242,7 @@ router.post('/profile', requireAuth, async (req, res, next) => {
         country,
         nativeLang,
         targetLang,
+        preferredVoiceDb,
         nativeGender || null,
         targetGender || null,
         deliveryMode,
@@ -282,8 +290,27 @@ router.get('/account-settings', requireAuth, async (req, res, next) => {
       sessions,
       passwordError: req.query.pwerr || null,
       passwordSaved: req.query.pwsaved === '1',
+      voiceSaved: req.query.voicesaved === '1',
+      voiceError: req.query.voiceerr || null,
       deleteError: req.query.delerr || null
     });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// POST /account-settings/voice  — actualiza preferred_voice
+// ---------------------------------------------------------------------------
+
+router.post('/account-settings/voice', requireAuth, async (req, res, next) => {
+  try {
+    let v = String(req.body.preferredVoice || req.body.preferred_voice || '').trim().toLowerCase();
+    if (v === 'auto' || v === '') {
+      v = null; // automática por género
+    } else if (!VALID_VOICES.includes(v)) {
+      return res.redirect('/account-settings?voiceerr=' + encodeURIComponent('Voz no válida.'));
+    }
+    await db.query('UPDATE users SET preferred_voice = ? WHERE id = ?', [v, req.user.id]);
+    return res.redirect('/account-settings?voicesaved=1');
   } catch (err) { next(err); }
 });
 

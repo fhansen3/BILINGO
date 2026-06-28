@@ -1,11 +1,74 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="<%= typeof htmlLang !== 'undefined' ? htmlLang : 'es' %>">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= typeof title !== 'undefined' ? title : 'BiLingo Meet' %></title>
-  <meta name="description" content="<%= typeof description !== 'undefined' ? description : 'Plataforma de videollamadas con traducción en tiempo real para equipos globales.' %>">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🦜%3C/text%3E%3C/svg%3E">
+
+  <%
+    // ---------- SEO / OG defaults ----------
+    var _title = (typeof title !== 'undefined' && title) ? title :
+      'BiLingo Meet — Free real-time translated video meetings in any language';
+    var _description = (typeof description !== 'undefined' && description) ? description :
+      '🦜 Free video meetings translated live by AI. Talk in your language — everyone hears theirs in real time. Group calls, 30+ languages, no install, works in any browser.';
+    var _keywords = (typeof keywords !== 'undefined' && keywords) ? keywords :
+      'free video conferencing, multilingual video calls, real-time translation, AI interpreter, live translated meetings, multilingual meetings, free online meetings, video chat translation, real time interpreter, multilingual zoom alternative, free meeting app, translated video conference, language translation meeting, bilingual meetings, international video calls';
+    var _ogType = (typeof ogType !== 'undefined' && ogType) ? ogType : 'website';
+    var _ogImage = (typeof ogImage !== 'undefined' && ogImage) ? ogImage : 'images/og-image.png';
+    var _ogImageAlt = (typeof ogImageAlt !== 'undefined' && ogImageAlt) ? ogImageAlt :
+      'BiLingo Meet — Real-time translated video meetings. Talk in your language, everyone hears theirs.';
+    var _canonical = (typeof canonicalUrl !== 'undefined' && canonicalUrl) ? canonicalUrl : null;
+    var _robots = (typeof robots !== 'undefined' && robots) ? robots : 'index,follow';
+    var _ogLocale = (typeof ogLocale !== 'undefined' && ogLocale) ? ogLocale : 'en_US';
+    var _siteName = 'BiLingo Meet';
+    var _twitterSite = (typeof twitterSite !== 'undefined' && twitterSite) ? twitterSite : '';
+    var _jsonLd = (typeof jsonLd !== 'undefined' && jsonLd) ? jsonLd : null;
+  %>
+
+  <title><%= _title %></title>
+  <meta name="description" content="<%= _description %>">
+  <meta name="keywords" content="<%= _keywords %>">
+  <meta name="robots" content="<%= _robots %>">
+  <meta name="author" content="BiLingo Meet">
+  <meta name="application-name" content="BiLingo Meet">
+  <meta name="theme-color" content="#0B3D91">
+
+  <% if (_canonical) { %>
+    <link rel="canonical" href="<%= _canonical %>">
+  <% } %>
+
+  <!-- Open Graph (Facebook, WhatsApp, LinkedIn, iMessage, Slack, Telegram, Discord) -->
+  <meta property="og:type" content="<%= _ogType %>">
+  <meta property="og:site_name" content="<%= _siteName %>">
+  <meta property="og:title" content="<%= _title %>">
+  <meta property="og:description" content="<%= _description %>">
+  <meta property="og:image" content="<%= _ogImage %>">
+  <meta property="og:image:alt" content="<%= _ogImageAlt %>">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:locale" content="<%= _ogLocale %>">
+  <meta property="og:locale:alternate" content="es_ES">
+  <meta property="og:locale:alternate" content="pt_BR">
+  <meta property="og:locale:alternate" content="fr_FR">
+  <meta property="og:locale:alternate" content="de_DE">
+  <meta property="og:locale:alternate" content="it_IT">
+  <% if (_canonical) { %>
+    <meta property="og:url" content="<%= _canonical %>">
+  <% } %>
+
+  <!-- Twitter / X Cards -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="<%= _title %>">
+  <meta name="twitter:description" content="<%= _description %>">
+  <meta name="twitter:image" content="<%= _ogImage %>">
+  <meta name="twitter:image:alt" content="<%= _ogImageAlt %>">
+  <% if (_twitterSite) { %>
+    <meta name="twitter:site" content="<%= _twitterSite %>">
+  <% } %>
+
+  <!-- Favicons / app icons -->
+  <link rel="icon" type="image/svg+xml" href="images/logo.svg">
+  <link rel="apple-touch-icon" href="images/logo.svg">
 
   <!-- Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -19,7 +82,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- Design system -->
-  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <% if (_jsonLd) { %>
+    <script type="application/ld+json"><%- JSON.stringify(_jsonLd) %></script>
+  <% } %>
 </head>
 <body>
   <% if (typeof nav === 'undefined' || nav === 'public') { %>
@@ -120,7 +187,7 @@
         }
       })();
     </script>
-    <script src="/js/notifications.js"></script>
+    <script src="js/notifications.js"></script>
     <script>
       // Boot the notifications socket as soon as the page is ready.
       (function () {

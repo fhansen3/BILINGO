@@ -17,6 +17,162 @@
       </div>
     </div>
 
+    <!-- Voice preference -->
+    <div class="card bm-shadow-sm mb-3">
+      <div class="card-body">
+        <h2 class="h6 fw-bold mb-1"><i class="fa-solid fa-microphone-lines me-2 text-primary"></i>Voz del intérprete</h2>
+        <p class="text-muted small mb-3">
+          Esta es la voz con la que escucharás las traducciones de tus interlocutores.
+          Si dejas <em>Automática</em>, se elige según el género configurado en tu perfil.
+        </p>
+
+        <% if (typeof voiceSaved !== 'undefined' && voiceSaved) { %>
+          <div class="alert alert-success small py-2"><i class="fa-solid fa-circle-check me-1"></i> Voz actualizada.</div>
+        <% } %>
+        <% if (typeof voiceError !== 'undefined' && voiceError) { %>
+          <div class="alert alert-danger small py-2"><i class="fa-solid fa-triangle-exclamation me-1"></i> <%= voiceError %></div>
+        <% } %>
+
+        <form action="account-settings/voice" method="post">
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-7">
+              <label class="form-label small fw-semibold">Voz preferida</label>
+              <select name="preferredVoice" id="voiceSelect" class="form-select">
+                <option value="auto" <%= !profile.preferred_voice ? 'selected' : '' %>>
+                  Automática (según género del perfil)
+                </option>
+                <optgroup label="Voces femeninas">
+                  <option value="alloy"   <%= profile.preferred_voice === 'alloy'   ? 'selected' : '' %>>Alloy — neutra, clara</option>
+                  <option value="coral"   <%= profile.preferred_voice === 'coral'   ? 'selected' : '' %>>Coral — expresiva</option>
+                  <option value="shimmer" <%= profile.preferred_voice === 'shimmer' ? 'selected' : '' %>>Shimmer — brillante</option>
+                  <option value="sage"    <%= profile.preferred_voice === 'sage'    ? 'selected' : '' %>>Sage — calmada</option>
+                  <option value="marin"   <%= profile.preferred_voice === 'marin'   ? 'selected' : '' %>>Marin — joven</option>
+                </optgroup>
+                <optgroup label="Voces masculinas">
+                  <option value="echo"   <%= profile.preferred_voice === 'echo'   ? 'selected' : '' %>>Echo — grave</option>
+                  <option value="ash"    <%= profile.preferred_voice === 'ash'    ? 'selected' : '' %>>Ash — cálida</option>
+                  <option value="ballad" <%= profile.preferred_voice === 'ballad' ? 'selected' : '' %>>Ballad — suave</option>
+                  <option value="verse"  <%= profile.preferred_voice === 'verse'  ? 'selected' : '' %>>Verse — articulada</option>
+                  <option value="cedar"  <%= profile.preferred_voice === 'cedar'  ? 'selected' : '' %>>Cedar — profunda</option>
+                </optgroup>
+              </select>
+              <div class="form-text small">
+                Para que la voz nueva tenga efecto, sal y vuelve a entrar a la reunión actual.
+              </div>
+            </div>
+            <div class="col-12 col-md-5 text-md-end">
+              <button type="button" id="btnPreviewVoice" class="btn btn-outline-secondary me-2">
+                <i class="fa-solid fa-play me-1"></i>Probar voz
+              </button>
+              <button type="submit" class="btn btn-primary">
+                <i class="fa-solid fa-floppy-disk me-1"></i>Guardar
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <audio id="voicePreviewAudio" preload="none" style="display:none;"></audio>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        var btn = document.getElementById('btnPreviewVoice');
+        var sel = document.getElementById('voiceSelect');
+        if (!btn || !sel) return;
+
+        // Texto de muestra en el idioma nativo del usuario.
+        var nativeLang = <%- JSON.stringify((profile && profile.native_language) || 'es') %>;
+        var SAMPLES = {
+          es: 'Hola, esta es la voz con la que escucharás las traducciones en BiLingo Meet.',
+          en: 'Hello, this is the voice you will hear translations with on BiLingo Meet.',
+          pt: 'Olá, esta é a voz com a qual você ouvirá as traduções no BiLingo Meet.',
+          fr: 'Bonjour, voici la voix avec laquelle vous entendrez les traductions sur BiLingo Meet.',
+          de: 'Hallo, das ist die Stimme, mit der Sie Übersetzungen auf BiLingo Meet hören werden.',
+          it: 'Ciao, questa è la voce con cui sentirai le traduzioni su BiLingo Meet.'
+        };
+        var BCP47 = {
+          es: 'es-ES', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR',
+          de: 'de-DE', it: 'it-IT', zh: 'zh-CN', ja: 'ja-JP',
+          ar: 'ar-SA', ru: 'ru-RU', ko: 'ko-KR', nl: 'nl-NL',
+          pl: 'pl-PL', tr: 'tr-TR', hi: 'hi-IN'
+        };
+
+        function genderOf(voiceKey) {
+          var male   = ['ash','ballad','echo','verse','cedar'];
+          return male.indexOf(voiceKey) >= 0 ? 'male' : 'female';
+        }
+
+        function pickBrowserVoice(langCode, gender) {
+          if (!('speechSynthesis' in window)) return null;
+          var voices = window.speechSynthesis.getVoices() || [];
+          if (!voices.length) return null;
+          var base = (langCode || 'en').split('-')[0].toLowerCase();
+          var sameLang = voices.filter(function(v) {
+            return (v.lang || '').toLowerCase().indexOf(base) === 0;
+          });
+          var pool = sameLang.length ? sameLang : voices;
+          // Heurística de género por nombre
+          var hints = gender === 'male'
+            ? ['male','hombre','masculin','homem','jorge','diego','daniel','google uk english male','google us english','enrique','paulo','thomas','klaus']
+            : ['female','mujer','femenin','helena','mónica','monica','paulina','laura','google uk english female','google us english female','samantha','victoria','karen'];
+          for (var i = 0; i < pool.length; i++) {
+            var nm = (pool[i].name || '').toLowerCase();
+            for (var j = 0; j < hints.length; j++) {
+              if (nm.indexOf(hints[j]) >= 0) return pool[i];
+            }
+          }
+          return pool[0];
+        }
+
+        function speak(text, langCode, gender) {
+          if (!('speechSynthesis' in window)) return false;
+          try {
+            window.speechSynthesis.cancel();
+            var u = new SpeechSynthesisUtterance(text);
+            u.lang = BCP47[langCode] || 'en-US';
+            u.rate = 1.0;
+            u.pitch = gender === 'male' ? 0.85 : 1.1;
+            var v = pickBrowserVoice(u.lang, gender);
+            if (v) u.voice = v;
+            window.speechSynthesis.speak(u);
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }
+
+        // Algunos navegadores cargan las voces de forma asíncrona.
+        if ('speechSynthesis' in window && typeof speechSynthesis.onvoiceschanged !== 'undefined') {
+          speechSynthesis.getVoices();
+        }
+
+        btn.addEventListener('click', function() {
+          var v = sel.value;
+          if (v === 'auto') v = 'alloy';
+          var gender = genderOf(v);
+          var text = SAMPLES[nativeLang] || SAMPLES.en;
+
+          btn.disabled = true;
+          var prev = btn.innerHTML;
+          btn.innerHTML = '<i class="fa-solid fa-volume-high me-1"></i>Reproduciendo…';
+          var done = function() {
+            btn.disabled = false;
+            btn.innerHTML = prev;
+          };
+          var ok = speak(text, nativeLang, gender);
+          if (!ok) {
+            alert('Tu navegador no soporta síntesis de voz local para la prueba. La voz elegida se aplicará igualmente en la próxima reunión.');
+            done();
+            return;
+          }
+          // La prueba con speechSynthesis es local del navegador (no es la voz exacta
+          // de OpenAI, pero da una idea del tono). En la sala se usa la voz de OpenAI.
+          setTimeout(done, 5000);
+        });
+      })();
+    </script>
+
     <!-- Password -->
     <div class="card bm-shadow-sm mb-3">
       <div class="card-body">

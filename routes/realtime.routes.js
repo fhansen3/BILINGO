@@ -28,6 +28,28 @@ const REALTIME_MODEL = 'gpt-realtime-translate';
 const REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'alloy';
 const TRANSCRIBE_MODEL = process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe';
 
+// Catálogo oficial de voces soportadas por OpenAI Realtime (incluye translate).
+// Clasificadas aproximadamente por timbre — usadas para el fallback por género.
+const VOICE_CATALOG = {
+  alloy:   { gender: 'female',  label: 'Alloy (femenina, neutra)' },
+  ash:     { gender: 'male',    label: 'Ash (masculina, cálida)' },
+  ballad:  { gender: 'male',    label: 'Ballad (masculina, suave)' },
+  coral:   { gender: 'female',  label: 'Coral (femenina, expresiva)' },
+  echo:    { gender: 'male',    label: 'Echo (masculina, grave)' },
+  sage:    { gender: 'female',  label: 'Sage (femenina, calmada)' },
+  shimmer: { gender: 'female',  label: 'Shimmer (femenina, brillante)' },
+  verse:   { gender: 'male',    label: 'Verse (masculina, articulada)' },
+  marin:   { gender: 'female',  label: 'Marin (femenina, joven)' },
+  cedar:   { gender: 'male',    label: 'Cedar (masculina, profunda)' }
+};
+const VALID_VOICES = Object.keys(VOICE_CATALOG);
+
+function pickVoiceByGender(gender) {
+  if (gender === 'male')   return 'ash';
+  if (gender === 'female') return 'coral';
+  return 'alloy'; // neutral / sin preferencia
+}
+
 console.log('[realtime] boot — model hard-coded to ' + REALTIME_MODEL +
             ' (env OPENAI_REALTIME_MODEL=' + JSON.stringify(RAW_MODEL_ENV) + ' is ignored)');
 
@@ -110,6 +132,37 @@ async function resolveNativeLang(req) {
 }
 
 /**
+ * Determina qué voz usar para este usuario en la sesión Realtime.
+ * Prioridad:
+ *   1. body.voice (override explícito desde la sala, si vino y es válido)
+ *   2. users.preferred_voice (lo que el usuario eligió en su perfil)
+ *   3. fallback por género (default_native_voice_gender)
+ *   4. REALTIME_VOICE del .env (default global)
+ */
+async function resolveVoice(req) {
+  // 1) Override por body
+  if (req.body && req.body.voice) {
+    const v = String(req.body.voice).trim().toLowerCase();
+    if (VALID_VOICES.includes(v)) return v;
+  }
+  // 2 + 3) Mirar DB
+  try {
+    const rows = await db.query(
+      'SELECT preferred_voice, default_native_voice_gender FROM users WHERE id = ? LIMIT 1',
+      [req.user.id]
+    );
+    if (rows.length) {
+      const pref = rows[0].preferred_voice && String(rows[0].preferred_voice).trim().toLowerCase();
+      if (pref && VALID_VOICES.includes(pref)) return pref;
+      const g = rows[0].default_native_voice_gender;
+      if (g) return pickVoiceByGender(g);
+    }
+  } catch (_) { /* ignore */ }
+  // 4) Fallback global
+  return VALID_VOICES.includes(REALTIME_VOICE) ? REALTIME_VOICE : 'alloy';
+}
+
+/**
  * Build the request payload for the Realtime session.
  *
  * - For `gpt-realtime-translate`: per official docs, the payload shape is
@@ -121,15 +174,19 @@ async function resolveNativeLang(req) {
  * - For `gpt-realtime` (general): use instructions + voice. Keeps the
  *   "assistant who happens to translate" behavior as a fallback.
  */
-function buildSessionPayload(model, nativeLang) {
+function buildSessionPayload(model, nativeLang, voice) {
   const isTranslate = /translate/i.test(model);
+  const voiceToUse = voice || REALTIME_VOICE;
 
   if (isTranslate) {
     return {
       session: {
         model: model,
         audio: {
-          output: { language: nativeLang }
+          output: {
+            language: nativeLang,
+            voice: voiceToUse
+          }
         }
       }
     };
@@ -154,7 +211,7 @@ function buildSessionPayload(model, nativeLang) {
         },
         output: {
           format: { type: 'audio/pcm', rate: 24000 },
-          voice: REALTIME_VOICE
+          voice: voiceToUse
         }
       }
     }
@@ -165,10 +222,31 @@ function buildSessionPayload(model, nativeLang) {
  * Minimal-payload fallback if the rich payload is rejected with
  * beta_api_shape_disabled / invalid_request_error.
  */
-function buildMinimalPayload(model, nativeLang) {
+function buildMinimalPayload(model, nativeLang, voice) {
+  const isTranslate = /translate/i.test(model);
+  const voiceToUse = voice || REALTIME_VOICE;
+  if (isTranslate) {
+    // Minimal con voice — si OpenAI lo rechaza, otro retry sin voice abajo.
+    return {
+      session: {
+        model: model,
+        audio: { output: { language: nativeLang, voice: voiceToUse } }
+      }
+    };
+  }
+  return {
+    session: {
+      type: 'realtime',
+      model: model,
+      instructions: buildInstructions(nativeLang)
+    }
+  };
+}
+
+// Último recurso: sin voice (por si OpenAI no la acepta en translate todavía).
+function buildBarebonePayload(model, nativeLang) {
   const isTranslate = /translate/i.test(model);
   if (isTranslate) {
-    // Already minimal — same shape as buildSessionPayload for translate.
     return {
       session: {
         model: model,
@@ -231,11 +309,12 @@ router.post('/session', requireAuth, async (req, res, next) => {
     }
 
     const nativeLang = await resolveNativeLang(req);
+    const voice = await resolveVoice(req);
     const model = REALTIME_MODEL;
-    const payload = buildSessionPayload(model, nativeLang);
+    const payload = buildSessionPayload(model, nativeLang, voice);
     const csPath = clientSecretsPath(model);
 
-    console.log('[realtime/session] requesting model=' + model + ' target=' + nativeLang + ' path=' + csPath);
+    console.log('[realtime/session] requesting model=' + model + ' target=' + nativeLang + ' voice=' + voice + ' path=' + csPath);
 
     let r = await postJSON('api.openai.com', csPath, apiKey, payload);
     console.log('[realtime/session] ' + csPath + ' ->', r.status, JSON.stringify(r.body).slice(0, 600));
@@ -252,18 +331,39 @@ router.post('/session', requireAuth, async (req, res, next) => {
       );
 
       if (retryable) {
-        console.warn('[realtime/session] retrying with minimal payload');
-        const minimal = buildMinimalPayload(model, nativeLang);
-        const r2 = await postJSON('api.openai.com', csPath, apiKey, minimal);
+        console.warn('[realtime/session] retrying with minimal payload (with voice)');
+        const minimal = buildMinimalPayload(model, nativeLang, voice);
+        let r2 = await postJSON('api.openai.com', csPath, apiKey, minimal);
         console.log('[realtime/session] minimal retry ' + csPath + ' ->', r2.status, JSON.stringify(r2.body).slice(0, 600));
-        const m = extractClientSecret(r2.body);
+        let m = extractClientSecret(r2.body);
         clientSecretValue = m.value;
         expiresAt = m.expiresAt;
+
+        // Si todavía falla y el error sugiere que voice no se acepta,
+        // probamos sin voice (barebones).
+        if (!clientSecretValue) {
+          const e2code = r2.body && r2.body.error && r2.body.error.code;
+          const e2type = r2.body && r2.body.error && r2.body.error.type;
+          const e2msg = (r2.body && r2.body.error && r2.body.error.message) || '';
+          const voiceProblem = /voice/i.test(e2msg) || e2code === 'invalid_request_error' || e2type === 'invalid_request_error';
+          if (voiceProblem) {
+            console.warn('[realtime/session] retrying barebone (no voice)');
+            const bare = buildBarebonePayload(model, nativeLang);
+            const r3 = await postJSON('api.openai.com', csPath, apiKey, bare);
+            console.log('[realtime/session] barebone retry ' + csPath + ' ->', r3.status, JSON.stringify(r3.body).slice(0, 600));
+            const m3 = extractClientSecret(r3.body);
+            clientSecretValue = m3.value;
+            expiresAt = m3.expiresAt;
+            r2 = r3; // para el reporte de error
+          }
+        }
+
         if (!clientSecretValue) {
           LAST_UPSTREAM_ERROR = {
             at: new Date().toISOString(),
             model,
             nativeLang,
+            voice,
             attempted_payload: minimal,
             upstream_status: r2.status,
             upstream_body: r2.body
@@ -301,7 +401,7 @@ router.post('/session', requireAuth, async (req, res, next) => {
       client_secret: clientSecretValue,
       expires_at: expiresAt,
       model: model,
-      voice: REALTIME_VOICE,
+      voice: voice,
       nativeLang,
       // Tell the client which SDP endpoint to use. `gpt-realtime-translate`
       // negotiates SDP at /v1/realtime/translations/calls, not /v1/realtime/calls.
@@ -325,6 +425,20 @@ router.get('/status', requireAuth, (req, res) => {
     env_model_ignored: true,
     last_upstream_error: LAST_UPSTREAM_ERROR
   });
+});
+
+/**
+ * GET /api/realtime/voices
+ * Catálogo de voces disponibles para que el frontend arme el selector.
+ */
+router.get('/voices', requireAuth, (req, res) => {
+  const voices = Object.keys(VOICE_CATALOG).map((key) => ({
+    key,
+    label: VOICE_CATALOG[key].label,
+    gender: VOICE_CATALOG[key].gender
+  }));
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.json({ voices, default: REALTIME_VOICE });
 });
 
 /**
