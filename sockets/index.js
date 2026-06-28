@@ -3,8 +3,18 @@
 const { verify } = require('../utils/jwt');
 const db = require('../config/db');
 const roomsService = require('../services/rooms.service');
-const { translate } = require('../utils/translate');
+const { translateText } = require('../services/openaiTranslate');
 const { processSegment } = require('../services/translationPipeline');
+
+const MAX_PARTICIPANTS_PER_ROOM = Math.max(
+  2,
+  Math.min(50, parseInt(process.env.MAX_PARTICIPANTS_PER_ROOM || '10', 10) || 10)
+);
+
+function normalizeLang(code) {
+  if (!code) return code;
+  return String(code).toLowerCase().split('-')[0];
+}
 
 function parseCookies(cookieHeader) {
   const out = {};
@@ -41,6 +51,35 @@ function attachSockets(io) {
     const user = socket.user;
     await db.query('UPDATE users SET is_online = 1, last_seen = NOW() WHERE id = ?', [user.id]);
     io.emit('presence:update', { userId: user.id, online: true });
+
+    // Personal channel — used for direct user notifications (e.g. room
+    // invitations from other users). Anything emitted to 'user:<id>' reaches
+    // every active socket the user has open.
+    socket.join(`user:${user.id}`);
+
+    // Push any pending room invitations to this socket on connect, so users
+    // who reconnect or open a second tab don't miss in-flight invites.
+    try {
+      const invitationsService = require('../services/invitations.service');
+      const pending = await invitationsService.listPendingForUser(user.id);
+      if (pending && pending.length) {
+        socket.emit('invite:pending', pending.map(inv => ({
+          invitationId: inv.id,
+          roomCode: inv.room_code,
+          topic: inv.topic,
+          message: inv.message,
+          inviter: {
+            id: inv.inviter_id,
+            name: inv.inviter_name,
+            avatarColor: inv.inviter_color
+          },
+          expiresAt: inv.expires_at,
+          createdAt: inv.created_at
+        })));
+      }
+    } catch (e) {
+      console.error('[invite:pending]', e.message);
+    }
 
     // ---------------------------------------------------------------------
     // WAITING ROOM FLOW
@@ -150,11 +189,24 @@ function attachSockets(io) {
         const room = await roomsService.getRoomByCode(roomCode);
         if (!room) return socket.emit('room:error', { message: 'Room not found' });
 
+        // Enforce max participants (default 10). Counts unique users currently
+        // in the room. The same user on multiple sockets only counts once.
+        const existing = await io.in(`room:${room.id}`).fetchSockets();
+        const uniqueUsers = new Set(existing.map(s => s.user && s.user.id).filter(Boolean));
+        const alreadyIn = uniqueUsers.has(user.id);
+        if (!alreadyIn && uniqueUsers.size >= MAX_PARTICIPANTS_PER_ROOM) {
+          return socket.emit('room:error', {
+            code: 'room_full',
+            message: `This room is full (max ${MAX_PARTICIPANTS_PER_ROOM} participants).`
+          });
+        }
+
         socket.join(`room:${room.id}`);
         socket.data.roomId = room.id;
         socket.data.roomCode = roomCode;
-        if (sourceLang) socket.data.sourceLang = sourceLang;
-        if (targetLang) socket.data.targetLang = targetLang;
+        // Normalize so 'en-US' and 'en' are treated as the same listener bucket.
+        if (sourceLang) socket.data.sourceLang = normalizeLang(sourceLang);
+        if (targetLang) socket.data.targetLang = normalizeLang(targetLang);
 
         // Notify others in the room
         socket.to(`room:${room.id}`).emit('peer:joined', {
@@ -186,8 +238,8 @@ function attachSockets(io) {
 
     // Client updated its language preferences
     socket.on('lang:update', ({ sourceLang, targetLang }) => {
-      if (sourceLang) socket.data.sourceLang = sourceLang;
-      if (targetLang) socket.data.targetLang = targetLang;
+      if (sourceLang) socket.data.sourceLang = normalizeLang(sourceLang);
+      if (targetLang) socket.data.targetLang = normalizeLang(targetLang);
       if (socket.data.roomId) {
         socket.to(`room:${socket.data.roomId}`).emit('peer:lang', {
           socketId: socket.id,
@@ -217,24 +269,26 @@ function attachSockets(io) {
       const senderTargetFallback = targetLang || socket.data.targetLang || senderSource;
 
       try {
-        // Collect every recipient's preferred target language (the language THEY want to read in)
+        // Collect every recipient's NATIVE language (what they want to READ in).
+        // Each unique native language = ONE OpenAI call. Listeners that share a
+        // native language share the same translation.
         const sockets = await io.in(`room:${socket.data.roomId}`).fetchSockets();
+        const normSenderSource = normalizeLang(senderSource);
         const targetLangs = new Set();
-        targetLangs.add(senderSource); // sender sees their original
+        targetLangs.add(normSenderSource); // sender always sees their original
         sockets.forEach(s => {
           if (s.id === socket.id) return;
-          // Peer wants to READ in their own sourceLang (the lang THEY speak)
-          if (s.data.sourceLang) targetLangs.add(s.data.sourceLang);
+          const peerLang = normalizeLang(s.data.sourceLang);
+          if (peerLang) targetLangs.add(peerLang);
         });
 
-        // Translate once per unique target language
-        const translations = {};
-        translations[senderSource] = trimmed;
-        for (const lang of targetLangs) {
-          if (lang === senderSource) continue;
-          const out = await translate(trimmed, senderSource, lang);
+        // Translate once per unique target language, in parallel.
+        const translations = { [normSenderSource]: trimmed };
+        const toTranslate = Array.from(targetLangs).filter(l => l !== normSenderSource);
+        await Promise.all(toTranslate.map(async (lang) => {
+          const out = await translateText(trimmed, normSenderSource, lang);
           translations[lang] = out || trimmed;
-        }
+        }));
 
         // Persist the message (store the sender's source language and a default translation
         // toward the fallback target — used for chat history rendering)
@@ -250,13 +304,15 @@ function attachSockets(io) {
         // Emit to each socket in the room with the right translation for THEM
         for (const s of sockets) {
           const isSender = s.id === socket.id;
-          const recipientLang = isSender ? senderSource : (s.data.sourceLang || senderSource);
+          const recipientLang = isSender
+            ? normSenderSource
+            : (normalizeLang(s.data.sourceLang) || normSenderSource);
           const translated = translations[recipientLang] || trimmed;
           s.emit('chat:message', {
             ...msg,
-            source_lang: senderSource,
+            source_lang: normSenderSource,
             target_lang: isSender ? null : recipientLang,
-            translated_content: isSender ? null : (recipientLang !== senderSource ? translated : null)
+            translated_content: isSender ? null : (recipientLang !== normSenderSource ? translated : null)
           });
         }
       } catch (err) {

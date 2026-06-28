@@ -1,6 +1,8 @@
 'use strict';
 
 const roomsService = require('../services/rooms.service');
+const invitationsService = require('../services/invitations.service');
+const { getIO } = require('../sockets/io');
 
 async function create(req, res, next) {
   try {
@@ -49,4 +51,34 @@ async function getMessages(req, res, next) {
   } catch (err) { next(err); }
 }
 
-module.exports = { create, getByCode, join, end, listMine, getMessages };
+async function invite(req, res, next) {
+  try {
+    const { user_id, userId, message } = req.body || {};
+    const inviteeId = user_id || userId;
+    const inv = await invitationsService.create({
+      roomCode: req.params.code,
+      inviterId: req.user.id,
+      inviteeId,
+      message
+    });
+    const io = getIO();
+    if (io && inv) {
+      io.to('user:' + inv.invitee_id).emit('invite:incoming', {
+        invitationId: inv.id,
+        roomCode: inv.room_code,
+        topic: inv.topic,
+        message: inv.message,
+        inviter: {
+          id: inv.inviter_id,
+          name: inv.inviter_name,
+          avatarColor: inv.inviter_color
+        },
+        expiresAt: inv.expires_at,
+        createdAt: inv.created_at
+      });
+    }
+    res.json({ ok: true, invitation: inv });
+  } catch (err) { next(err); }
+}
+
+module.exports = { create, getByCode, join, end, listMine, getMessages, invite };

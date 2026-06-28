@@ -14,15 +14,15 @@
         window.AppNav(user) +
         '<main class="main-content">' +
           '<div class="page-header">' +
-            '<div><h2>Buscar compañeros</h2><p class="subtitle">Encuentra a alguien con quien practicar</p></div>' +
+            '<div><h2>Buscar colegas</h2><p class="subtitle">Encuentra a alguien de tu equipo para invitar a una reunión</p></div>' +
           '</div>' +
           '<div class="card-bl">' +
             '<form id="filter-form" style="display:grid; grid-template-columns: 1fr 1fr auto auto; gap:12px; align-items:end">' +
-              '<div class="field" style="margin:0"><label>Habla mi idioma</label><select name="learning"><option value="">Cualquiera</option>' +
-                LANGUAGES.map(function (l) { return '<option value="' + l + '"' + (user.native_language === l ? ' selected' : '') + '>' + l + '</option>'; }).join('') +
+              '<div class="field" style="margin:0"><label>Idioma nativo</label><select name="native"><option value="">Cualquiera</option>' +
+                LANGUAGES.map(function (l) { return '<option value="' + l + '">' + l + '</option>'; }).join('') +
               '</select></div>' +
-              '<div class="field" style="margin:0"><label>Aprende mi idioma</label><select name="native"><option value="">Cualquiera</option>' +
-                LANGUAGES.map(function (l) { return '<option value="' + l + '"' + (user.learning_language === l ? ' selected' : '') + '>' + l + '</option>'; }).join('') +
+              '<div class="field" style="margin:0"><label>Otro idioma</label><select name="learning"><option value="">Cualquiera</option>' +
+                LANGUAGES.map(function (l) { return '<option value="' + l + '">' + l + '</option>'; }).join('') +
               '</select></div>' +
               '<div class="field" style="margin:0"><label><input type="checkbox" name="online" value="1" style="width:auto; margin-right:6px"> Solo en línea</label></div>' +
               '<button type="submit" class="btn-bl btn-green"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>' +
@@ -34,6 +34,45 @@
 
     var form = container.querySelector('#filter-form');
     var result = container.querySelector('#partners-result');
+
+    async function inviteFlow(partnerId, partnerName) {
+      // Ask whether to invite to an existing active room or create a new one.
+      var myRooms = [];
+      try {
+        myRooms = await window.API.get('api/rooms/mine');
+      } catch (e) { /* ignore */ }
+      var activeRooms = (myRooms || []).filter(function (r) {
+        return r.status === 'waiting' || r.status === 'open' || r.status === 'active';
+      });
+
+      var roomCode = null;
+      if (activeRooms.length) {
+        // Use the most recent active one.
+        roomCode = activeRooms[0].room_code;
+      } else {
+        // Create a new room on the fly.
+        try {
+          var room = await window.API.post('api/rooms', { topic: 'Reunión con ' + partnerName });
+          roomCode = room.room_code;
+        } catch (err) {
+          window.UI.notify(err.message || 'No se pudo crear la sala', 'error');
+          return;
+        }
+      }
+
+      // Send the invitation.
+      try {
+        await window.API.post('api/rooms/' + roomCode + '/invite', {
+          user_id: partnerId,
+          message: 'Te invito a una reunión'
+        });
+        window.UI.notify('Invitación enviada a ' + partnerName, 'success');
+        // Open the room so the host is ready when the invitee accepts.
+        window.Router.navigate('room/' + roomCode);
+      } catch (err) {
+        window.UI.notify(err.message || 'No se pudo enviar la invitación', 'error');
+      }
+    }
 
     async function load() {
       result.innerHTML = '<p class="muted">Cargando…</p>';
@@ -50,15 +89,11 @@
         }
         result.innerHTML = '<div class="partner-list">' + list.map(card).join('') + '</div>';
         result.querySelectorAll('[data-invite]').forEach(function (b) {
-          b.addEventListener('click', async function () {
-            try {
-              var room = await window.API.post('api/rooms', { topic: 'Invitación directa' });
-              await navigator.clipboard.writeText(window.location.origin + window.location.pathname + '#/room/' + room.room_code).catch(function(){});
-              window.UI.notify('Sala creada · código ' + room.room_code + ' copiado', 'success');
-              window.Router.navigate('room/' + room.room_code);
-            } catch (err) {
-              window.UI.notify(err.message || 'Error', 'error');
-            }
+          b.addEventListener('click', function () {
+            var pid = b.getAttribute('data-invite');
+            var pname = b.getAttribute('data-name') || 'tu colega';
+            b.disabled = true;
+            inviteFlow(pid, pname).finally(function () { b.disabled = false; });
           });
         });
       } catch (err) {
@@ -80,17 +115,20 @@
           (p.native_language ? '<span class="lang-pill"><i class="fa-solid fa-microphone"></i> ' + window.UI.escapeHtml(p.native_language) + '</span>' : '') +
           (p.learning_language ? '<span class="lang-pill learn"><i class="fa-solid fa-book"></i> ' + window.UI.escapeHtml(p.learning_language) + '</span>' : '') +
         '</div>' +
-        '<button class="btn-bl btn-green btn-sm" data-invite="' + p.id + '"><i class="fa-solid fa-video"></i> Invitar a sala</button>' +
+        '<button class="btn-bl btn-green btn-sm" data-invite="' + p.id + '" data-name="' + window.UI.escapeHtml(p.display_name) + '"><i class="fa-solid fa-video"></i> Invitar a reunión</button>' +
       '</div>';
     }
 
     form.addEventListener('submit', function (e) { e.preventDefault(); load(); });
     load();
 
-    container.querySelector('#logout-btn').addEventListener('click', async function () {
-      await window.Auth.logout();
-      window.Router.navigate('landing');
-    });
+    var logoutBtn = container.querySelector('#logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async function () {
+        await window.Auth.logout();
+        window.Router.navigate('landing');
+      });
+    }
   }
 
   window.Router.register('partners', render);

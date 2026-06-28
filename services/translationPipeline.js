@@ -1,64 +1,79 @@
 'use strict';
 
 /**
- * Translation Pipeline (stub).
+ * Translation Pipeline — OpenAI-backed (chat / text) + persistence.
  *
- * Simulates STT → MT → TTS with random latencies and persists:
- *   - one `transcript_segments` row per spoken segment (with translations JSON)
- *   - one `translation_sessions` row per listener participant
+ * KEY OPTIMIZATION:
+ *   We translate ONCE per unique target language, then fan out to every
+ *   listener who needs that language. If a listener shares the speaker's
+ *   native language → zero API calls; the original text is reused.
  *
- * This is the seam where real ASR/MT/TTS providers will be plugged in later.
- * For now we lean on utils/translate.js (MyMemory) for MT and fabricate the
- * STT/TTS portions with realistic-feeling latencies.
+ * Persists, per spoken segment:
+ *   - one `transcript_segments` row (translations JSON keyed by target lang)
+ *   - one `translation_sessions` row per LISTENER (so we can bill / audit
+ *     per-user delivery)
+ *
+ * Realtime audio: this module also exposes the helpers that the WebSocket
+ * audio bridge will call (planned next step). The current path runs on
+ * text-level STT input (originalText supplied by client). When the audio
+ * bridge lands, it will fill `audioBlob` and STT will become a real call to
+ * gpt-realtime-mini (transcription + optional inline translation).
  */
 
 const db = require('../config/db');
-const { translate } = require('../utils/translate');
+const { translateWithUsage, isOpenAIConfigured, getChatModel } = require('./openaiTranslate');
+const { recordUsage } = require('./tokenUsage');
 
 const DEGRADED_THRESHOLD_MS = 2000;
+
+function normalizeLang(code) {
+  if (!code) return code;
+  return String(code).toLowerCase().split('-')[0];
+}
 
 function randomLatency(min, max) {
   return Math.floor(min + Math.random() * (max - min));
 }
 
-// Fake STT: pretend we transcribed an audio blob. If the caller already
-// supplied originalText, we use that and only fake the latency.
+/**
+ * Simulated STT layer — kept here so the rest of the pipeline doesn't change
+ * when we plug in real audio. When `originalText` is provided (text-mode
+ * speaking or a pre-transcribed client), we use it directly. Latency is
+ * recorded so analytics still get a value.
+ */
 async function simulateSTT(audioBlob, sourceLanguage, originalText) {
-  const latency = randomLatency(180, 520);
-  await new Promise(r => setTimeout(r, Math.min(latency, 50))); // don't actually sleep the full amount in tests
+  const latency = audioBlob ? randomLatency(220, 520) : randomLatency(40, 120);
   const text = originalText && String(originalText).trim()
-    ? String(originalText)
+    ? String(originalText).trim()
     : `[stt:${sourceLanguage}] sample transcript ${Date.now().toString(36)}`;
   return { text, latencyMs: latency };
 }
 
-// MT: try real translator, fall back to a tagged stub.
+/**
+ * Translate ONE unique target language. Wraps the OpenAI/MyMemory call and
+ * gives us a uniform { translated, latencyMs } shape regardless of provider.
+ */
 async function runMT(text, sourceLang, targetLang) {
-  const start = Date.now();
-  let translated = null;
-  if (sourceLang === targetLang) {
-    translated = text;
-  } else {
-    try {
-      translated = await translate(text, sourceLang, targetLang);
-    } catch (_) {
-      translated = null;
-    }
-    if (!translated) {
-      translated = `[${targetLang}] ${text}`;
-    }
+  const src = normalizeLang(sourceLang);
+  const tgt = normalizeLang(targetLang);
+  if (src === tgt) {
+    return { translated: text, latencyMs: 0, usage: null };
   }
-  // Ensure a minimum measured latency for the metric (random component)
-  const measured = Date.now() - start;
-  const latencyMs = Math.max(measured, randomLatency(120, 380));
-  return { translated, latencyMs };
-}
-
-// Fake TTS: returns a mock audio URL and a latency.
-async function simulateTTS(text, targetLang) {
-  const latency = randomLatency(250, 700);
-  const url = `/mock-audio/${targetLang}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp3`;
-  return { audioUrl: url, latencyMs: latency };
+  let usage = null;
+  try {
+    usage = await translateWithUsage(text, src, tgt);
+  } catch (e) {
+    usage = null;
+  }
+  let translated = usage && usage.text;
+  if (!translated) {
+    translated = `[${tgt}] ${text}`;
+  }
+  return {
+    translated,
+    latencyMs: (usage && usage.latencyMs) || 0,
+    usage
+  };
 }
 
 /**
@@ -67,7 +82,7 @@ async function simulateTTS(text, targetLang) {
  * @param {Object} opts
  * @param {number} opts.meetingId           — rooms.id
  * @param {number} [opts.speakerParticipantId] — meeting_participants.id of speaker
- * @param {number} [opts.speakerUserId]     — users.id of speaker (for logging)
+ * @param {number} [opts.speakerUserId]     — users.id of speaker
  * @param {Buffer|string|null} [opts.audioBlob]
  * @param {string} [opts.originalText]      — if STT already happened on the client
  * @param {string} opts.sourceLanguage      — e.g. 'en'
@@ -93,44 +108,42 @@ async function processSegment(opts) {
   if (!meetingId) throw new Error('meetingId is required');
   if (!sourceLanguage) throw new Error('sourceLanguage is required');
 
-  // 1. STT (simulated) — gives us original text + audio-in latency.
-  const stt = await simulateSTT(audioBlob, sourceLanguage, providedText);
+  const sourceLang = normalizeLang(sourceLanguage);
+
+  // 1. STT (simulated or pre-transcribed).
+  const stt = await simulateSTT(audioBlob, sourceLang, providedText);
   const originalText = stt.text;
   const audioInLatencyMs = stt.latencyMs;
 
-  // Compute startMs / endMs / confidence (timeline metadata for the segment).
+  // Timeline metadata.
   const audioDurationMs = randomLatency(800, 3500);
   const endMs = providedEndMs != null ? Number(providedEndMs) : Date.now();
   const startMs = providedStartMs != null ? Number(providedStartMs) : (endMs - audioDurationMs);
-  // STT confidence — provided, or simulated in [0.78, 0.99].
   const confidence = providedConfidence != null
     ? Math.max(0, Math.min(1, Number(providedConfidence)))
     : Math.round((0.78 + Math.random() * 0.21) * 1000) / 1000;
 
-  // 2. MT — unique target languages only (cache by lang code).
+  // 2. MT — group by unique normalized target language (THE OPTIMIZATION).
+  //    Listeners that share the same target language share one OpenAI call.
+  //    Listeners whose target == sourceLang get the original text for free.
   const uniqueTargets = Array.from(new Set(
     targetLanguages
-      .map(t => (t && t.targetLanguage) || null)
+      .map(t => t && t.targetLanguage ? normalizeLang(t.targetLanguage) : null)
       .filter(Boolean)
   ));
 
-  const mtByLang = {};   // { lang: { translated, latencyMs } }
-  const ttsByLang = {};  // { lang: { audioUrl, latencyMs } }
+  const mtByLang = {};
+  // Run translations IN PARALLEL — drops total latency for multi-lang rooms.
+  await Promise.all(uniqueTargets.map(async (lang) => {
+    mtByLang[lang] = await runMT(originalText, sourceLang, lang);
+  }));
 
-  for (const lang of uniqueTargets) {
-    const mt = await runMT(originalText, sourceLanguage, lang);
-    mtByLang[lang] = mt;
-    const tts = await simulateTTS(mt.translated, lang);
-    ttsByLang[lang] = tts;
-  }
-
-  // 3. Insert transcript_segments row.
+  // 3. transcript_segments row (translations keyed by target lang).
+  //    NOTE: no audio URL anymore — listeners hear the speaker's ORIGINAL
+  //    voice via WebRTC. Captions carry the translated text.
   const translationsForSegment = {};
   for (const lang of uniqueTargets) {
-    translationsForSegment[lang] = {
-      text: mtByLang[lang].translated,
-      audioUrl: ttsByLang[lang].audioUrl
-    };
+    translationsForSegment[lang] = { text: mtByLang[lang].translated };
   }
 
   const segRes = await db.query(
@@ -142,7 +155,7 @@ async function processSegment(opts) {
       meetingId,
       speakerParticipantId,
       speakerUserId,
-      sourceLanguage,
+      sourceLang,
       originalText,
       JSON.stringify(translationsForSegment),
       audioDurationMs,
@@ -153,17 +166,17 @@ async function processSegment(opts) {
   );
   const segmentId = segRes.insertId;
 
-  // 4. Insert one translation_sessions row per LISTENER.
+  // 4. translation_sessions: one row per LISTENER.
   const deliveries = [];
   for (const listener of targetLanguages) {
     if (!listener) continue;
-    const targetLanguage = listener.targetLanguage;
+    const targetLanguage = normalizeLang(listener.targetLanguage);
     if (!targetLanguage) continue;
 
     const mt = mtByLang[targetLanguage] || { translated: originalText, latencyMs: 0 };
-    const tts = ttsByLang[targetLanguage] || { audioUrl: null, latencyMs: 0 };
+    const ttsLatencyMs = 0; // no TTS — listeners hear the speaker's real voice
 
-    const totalLatencyMs = audioInLatencyMs + mt.latencyMs + tts.latencyMs;
+    const totalLatencyMs = audioInLatencyMs + mt.latencyMs + ttsLatencyMs;
     const isDegraded = totalLatencyMs > DEGRADED_THRESHOLD_MS ? 1 : 0;
 
     const insRes = await db.query(
@@ -181,14 +194,14 @@ async function processSegment(opts) {
         speakerParticipantId,
         listener.participantId || null,
         listener.userId || null,
-        sourceLanguage,
+        sourceLang,
         targetLanguage,
         originalText,
         mt.translated,
-        tts.audioUrl,
+        null,                  // no audio_url — original voice played via WebRTC
         audioInLatencyMs,
         mt.latencyMs,
-        tts.latencyMs,
+        ttsLatencyMs,
         totalLatencyMs,
         isDegraded
       ]
@@ -200,10 +213,10 @@ async function processSegment(opts) {
       userId: listener.userId || null,
       targetLanguage,
       translatedText: mt.translated,
-      audioUrl: tts.audioUrl,
+      audioUrl: null,
       audioInLatencyMs,
       translationLatencyMs: mt.latencyMs,
-      ttsLatencyMs: tts.latencyMs,
+      ttsLatencyMs,
       totalLatencyMs,
       isDegraded: Boolean(isDegraded)
     });
@@ -212,17 +225,20 @@ async function processSegment(opts) {
   return {
     segmentId,
     originalText,
-    sourceLanguage,
+    sourceLanguage: sourceLang,
     translations: translationsForSegment,
     startMs,
     endMs,
     confidence,
     audioDurationMs,
-    deliveries
+    deliveries,
+    provider: isOpenAIConfigured() ? 'openai:' + getChatModel() : 'mymemory'
   };
 }
 
 module.exports = {
   processSegment,
-  DEGRADED_THRESHOLD_MS
+  DEGRADED_THRESHOLD_MS,
+  // exposed for testing / debugging
+  _internal: { runMT, normalizeLang }
 };

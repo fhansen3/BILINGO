@@ -8,6 +8,7 @@ router.post('/', requireAuth, ctrl.create);
 router.get('/mine', requireAuth, ctrl.listMine);
 router.get('/:code', requireAuth, ctrl.getByCode);
 router.post('/:code/join', requireAuth, ctrl.join);
+router.post('/:code/invite', requireAuth, ctrl.invite);
 router.post('/:id/end', requireAuth, ctrl.end);
 router.get('/:id/messages', requireAuth, ctrl.getMessages);
 
