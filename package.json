@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "db:dump": "node scripts/db-dump.js",
     "smoke:auth": "node scripts/smoke-auth.js",
     "smoke:step19": "node scripts/smoke-step19.js",
     "smoke": "node scripts/smoke-step19.js"

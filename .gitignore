@@ -34,11 +34,12 @@ nul
 # Backups
 *.original
 
-# Project bundles & DB dumps (no subir a GitHub)
+# Project bundles (no subir a GitHub)
 *.tar.gz
 *.zip
-bilingo-meet-dump.sql
 dump-err.log
 
 # Research / scratch
 research/
+
+# NOTA: db/schema.sql y bilingo-meet-dump.sql SÍ se versionan (generados por scripts/db-dump.js)
