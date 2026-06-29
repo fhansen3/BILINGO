@@ -185,7 +185,7 @@
           <div class="alert alert-danger small py-2"><i class="fa-solid fa-triangle-exclamation me-1"></i> <%= passwordError %></div>
         <% } %>
 
-        <form action="/account-settings/password" method="post">
+        <form action="account-settings/password" method="post">
           <div class="row g-3">
             <div class="col-12 col-md-4">
               <label class="form-label small fw-semibold">Contraseña actual</label>
@@ -226,7 +226,7 @@
                 <div class="text-muted small">IP: <%= s.ip %> · iniciada <%= fmtDate(s.signedInAt) %></div>
               </div>
               <% if (s.current) { %>
-                <form action="/logout" method="post" class="m-0">
+                <form action="logout" method="post" class="m-0">
                   <button class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-right-from-bracket me-1"></i>Cerrar sesión</button>
                 </form>
               <% } %>
@@ -249,7 +249,7 @@
           <div class="alert alert-danger small py-2"><i class="fa-solid fa-triangle-exclamation me-1"></i> <%= deleteError %></div>
         <% } %>
 
-        <form action="/account-settings/delete" method="post" onsubmit="return confirm('¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');">
+        <form action="account-settings/delete" method="post" onsubmit="return confirm('¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.');">
           <div class="row g-3">
             <div class="col-12 col-md-6">
               <label class="form-label small fw-semibold">Escribe <code>ELIMINAR</code> para confirmar</label>

@@ -3,6 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <%
+    // baseHref is injected by middleware/basePrefix.js for every request.
+    // It is either "/run/184/" (or whatever proxy prefix), or "./" when
+    // the app is served at the domain root (future custom domain).
+    // This lets EVERY relative href/src/action in the page resolve to the
+    // correct path without hardcoding any prefix anywhere.
+    var _baseHref = (typeof baseHref !== 'undefined' && baseHref) ? baseHref : './';
+  %>
+  <base href="<%= _baseHref %>">
 
   <%
     // ---------- SEO / OG defaults ----------

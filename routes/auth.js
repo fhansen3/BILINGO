@@ -134,10 +134,17 @@ router.post('/signup', async (req, res, next) => {
       return renderError('El código de empresa debe tener exactamente 6 letras.');
     }
 
-    // Resolve company by code. If the code matches an existing ACTIVE company,
-    // the user simply joins it (no welcome bonus — credits are per-company).
-    // If it doesn't exist (or exists but is inactive), we auto-create a new
-    // company on the fly with that code and grant the 500-credit welcome bonus.
+    // Resolve company by code.
+    //
+    // Business rule (decidido con el usuario):
+    //   • Si el código YA pertenece a una empresa existente → NO permitimos
+    //     auto-registro silencioso. Mostramos el/los email(s) del/los
+    //     administrador(es) de esa empresa para que el usuario solicite el
+    //     alta. Esto evita que cualquiera con el código se cuele.
+    //   • Si el código está libre → se crea una nueva empresa y este usuario
+    //     queda como company_admin (primer usuario de la empresa) + 500
+    //     créditos de bienvenida.
+    //   • Si el código pertenece a una empresa desactivada → bloqueamos.
     let companyId;
     let companyJustCreated = false;
 
@@ -147,7 +154,27 @@ router.post('/signup', async (req, res, next) => {
     );
 
     if (existingCompany.length && existingCompany[0].is_active) {
-      companyId = existingCompany[0].id;
+      // Empresa existente: buscar admins para que el usuario los contacte.
+      const admins = await db.query(
+        `SELECT email, display_name
+           FROM users
+          WHERE company_id = ?
+            AND role IN ('company_admin','admin','superadmin')
+            AND status = 'active'
+          ORDER BY (role = 'company_admin') DESC, display_name ASC
+          LIMIT 3`,
+        [existingCompany[0].id]
+      );
+      let msg;
+      if (admins.length) {
+        const list = admins.map(a => a.email).join(', ');
+        msg = 'El código <strong>' + companyCode + '</strong> ya pertenece a la empresa "' +
+              existingCompany[0].name + '". Para unirte, solicita tu alta al administrador de la empresa: <strong>' +
+              list + '</strong>.';
+      } else {
+        msg = 'El código <strong>' + companyCode + '</strong> ya está registrado pero aún no tiene administradores activos. Contacta con soporte.';
+      }
+      return renderError(msg);
     } else if (existingCompany.length && !existingCompany[0].is_active) {
       // Code exists but the company is disabled — don't silently revive it.
       return renderError('Ese código pertenece a una empresa desactivada. Contacta con soporte o usa otro código.');
@@ -162,15 +189,26 @@ router.post('/signup', async (req, res, next) => {
         companyJustCreated = true;
       } catch (e) {
         if (e && e.code === 'ER_DUP_ENTRY') {
-          // Race: another signup created the same company a moment ago. Re-read.
+          // Race: another signup created the same company in parallel. Treat
+          // it the same as "code already in use" — ask the new user to
+          // contact its admin instead of joining silently.
           const again = await db.query(
-            'SELECT id, is_active FROM companies WHERE code = ?',
+            'SELECT id, name, is_active FROM companies WHERE code = ?',
             [companyCode]
           );
           if (!again.length || !again[0].is_active) {
             return renderError('No se pudo registrar la empresa. Inténtalo de nuevo.');
           }
-          companyId = again[0].id;
+          const admins = await db.query(
+            `SELECT email FROM users
+              WHERE company_id = ?
+                AND role IN ('company_admin','admin','superadmin')
+                AND status = 'active'
+              LIMIT 3`,
+            [again[0].id]
+          );
+          const list = admins.length ? admins.map(a => a.email).join(', ') : '(sin administradores aún)';
+          return renderError('El código <strong>' + companyCode + '</strong> ya está en uso. Solicita tu alta al administrador: <strong>' + list + '</strong>.');
         } else {
           throw e;
         }
@@ -197,12 +235,16 @@ router.post('/signup', async (req, res, next) => {
       if (voices.length) preferredVoice = voices[0].voice_key;
     }
 
+    // If this signup is creating a brand-new company, the first user becomes
+    // its company_admin. Otherwise (joining an existing company) → default role.
+    const newUserRole = companyJustCreated ? 'company_admin' : 'user';
+
     const result = await db.query(
       `INSERT INTO users
          (email, password_hash, display_name, avatar_color,
-          native_language, preferred_voice, company_id, last_login_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [email, hash, displayName, color, nativeLanguage, preferredVoice, companyId]
+          native_language, preferred_voice, company_id, role, last_login_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [email, hash, displayName, color, nativeLanguage, preferredVoice, companyId, newUserRole]
     );
 
     const rows = await db.query(

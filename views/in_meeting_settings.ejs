@@ -193,14 +193,14 @@
     <div>
       <h2><i class="fa-solid fa-gear me-2"></i>Configuración de la reunión</h2>
       <p class="mb-2">Ajusta tus preferencias de audio, idioma y subtítulos.</p>
-      <a href="/m/<%= m.room_code %>/room"><i class="fa-solid fa-arrow-left me-1"></i>Volver a la sala</a>
+      <a href="m/<%= m.room_code %>/room"><i class="fa-solid fa-arrow-left me-1"></i>Volver a la sala</a>
     </div>
   </div>
 
   <div class="offcanvas offcanvas-end show" tabindex="-1" id="bmSettingsDrawer" data-bs-scroll="true" data-bs-backdrop="false" style="visibility:visible;">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title"><i class="fa-solid fa-gear me-2"></i>Configuración</h5>
-      <a href="/m/<%= m.room_code %>/room" class="btn-close" aria-label="Cerrar"></a>
+      <a href="m/<%= m.room_code %>/room" class="btn-close" aria-label="Cerrar"></a>
     </div>
 
     <% if (typeof error !== 'undefined' && error) { %>
@@ -210,7 +210,7 @@
       <div class="bm-alert success"><i class="fa-solid fa-check me-1"></i>Cambios guardados.</div>
     <% } %>
 
-    <form method="POST" action="/m/<%= m.room_code %>/participants/me" id="bm-settings-form" style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0;">
+    <form method="POST" action="m/<%= m.room_code %>/participants/me" id="bm-settings-form" style="display:flex; flex-direction:column; flex:1 1 auto; min-height:0;">
       <ul class="nav nav-tabs" id="bm-settings-tabs" role="tablist">
         <li class="nav-item" role="presentation">
           <button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#tab-audio">
@@ -388,7 +388,7 @@
       </div>
 
       <div class="bm-save-bar">
-        <a href="/m/<%= m.room_code %>/room" class="btn btn-outline-light btn-sm">Cancelar</a>
+        <a href="m/<%= m.room_code %>/room" class="btn btn-outline-light btn-sm">Cancelar</a>
         <button type="submit" class="btn btn-primary btn-sm">
           <i class="fa-solid fa-floppy-disk me-1"></i> Guardar
         </button>
@@ -400,7 +400,7 @@
   <script>
     // Auto-redirect to /room if user closes the drawer by hitting Esc.
     document.addEventListener('keydown', function(e){
-      if (e.key === 'Escape') window.location.href = '/m/<%= m.room_code %>/room';
+      if (e.key === 'Escape') window.location.href = (document.querySelector('base')?.getAttribute('href') || '') + 'm/<%= m.room_code %>/room';
     });
   </script>
 </body>

@@ -1,90 +1,500 @@
 <div class="row g-4">
-  <aside class="col-lg-3">
+
+  <!-- TOC lateral sticky -->
+  <aside class="col-lg-3 d-none d-lg-block">
     <div class="card bm-shadow-sm p-3 sticky-top" style="top: 1rem;">
       <h6 class="fw-bold text-uppercase text-muted small mb-3">
-        <i class="fa-solid fa-list me-1"></i> En esta página
+        <i class="fa-solid fa-list me-1"></i> Contenido
       </h6>
-      <nav class="nav flex-column small">
-        <a class="nav-link px-0 py-1" href="#pipeline"><i class="fa-solid fa-route me-1 text-primary"></i> Pipeline de traducción</a>
-        <a class="nav-link px-0 py-1" href="#latency"><i class="fa-solid fa-gauge-high me-1 text-primary"></i> Latencia</a>
-        <a class="nav-link px-0 py-1" href="#privacy"><i class="fa-solid fa-shield-halved me-1 text-primary"></i> Privacidad</a>
-        <a class="nav-link px-0 py-1" href="#faq"><i class="fa-solid fa-circle-question me-1 text-primary"></i> Preguntas frecuentes</a>
+      <nav class="nav flex-column small help-toc">
+        <a class="nav-link px-2 py-1" href="#intro">Introducción</a>
+        <a class="nav-link px-2 py-1" href="#registro">1. Registrar el primer usuario</a>
+        <a class="nav-link px-2 py-1" href="#dashboard">2. Recorrido por el Dashboard</a>
+        <a class="nav-link px-2 py-1" href="#usuarios">3. Agregar nuevos usuarios</a>
+        <a class="nav-link px-2 py-1" href="#salas">4. Crear salas de reunión</a>
+        <a class="nav-link px-2 py-1" href="#invitar">5. Invitar y compartir el enlace</a>
+        <a class="nav-link px-2 py-1" href="#reunion">6. Dentro de la reunión</a>
+        <a class="nav-link px-2 py-1" href="#creditos">7. Créditos y consumo</a>
+        <a class="nav-link px-2 py-1" href="#mas-creditos">8. ¿Necesitás más créditos?</a>
+        <a class="nav-link px-2 py-1" href="#tips">Consejos y buenas prácticas</a>
       </nav>
     </div>
   </aside>
 
+  <!-- Contenido -->
   <div class="col-lg-9">
-    <header class="mb-4">
-      <h1 class="fw-bold mb-2">Centro de ayuda</h1>
-      <p class="text-muted mb-0">Todo lo que necesitas saber sobre cómo BiLingo Meet traduce tus conversaciones.</p>
-    </header>
 
-    <section id="pipeline" class="card bm-shadow-sm p-4 mb-4">
-      <h3 class="fw-bold mb-3"><i class="fa-solid fa-route text-primary me-2"></i> Pipeline de traducción</h3>
-      <p>Cuando envías un mensaje en una sala de BiLingo Meet, este recorre un camino de varios pasos antes de aparecer en pantalla de tus compañeros:</p>
-      <ol>
-        <li><strong>Captura:</strong> escribes el mensaje en tu idioma nativo en el panel de chat.</li>
-        <li><strong>Detección:</strong> el sistema confirma el idioma de origen a partir de tu perfil.</li>
-        <li><strong>Traducción:</strong> el motor traduce el mensaje a cada uno de los idiomas activos en la sala.</li>
-        <li><strong>Entrega:</strong> cada participante recibe la versión en su idioma preferido vía WebSocket.</li>
-        <li><strong>Historial:</strong> todas las variantes se guardan para que el contexto no se pierda.</li>
-      </ol>
-      <p class="mb-0 text-muted small">El mensaje original siempre queda registrado junto a sus traducciones — la traducción nunca reemplaza, solo complementa.</p>
-    </section>
-
-    <section id="latency" class="card bm-shadow-sm p-4 mb-4">
-      <h3 class="fw-bold mb-3"><i class="fa-solid fa-gauge-high text-primary me-2"></i> Latencia</h3>
-      <p>Optimizamos cada paso para que la conversación se sienta natural:</p>
-      <ul>
-        <li><strong>Video WebRTC:</strong> conexión peer-to-peer, normalmente por debajo de 150 ms entre participantes en la misma región.</li>
-        <li><strong>Chat traducido:</strong> entre 300 ms y 1 s desde que envías el mensaje hasta que aparece traducido al otro lado.</li>
-        <li><strong>Señalización:</strong> usamos WebSockets persistentes para evitar el coste de reconectar en cada mensaje.</li>
-      </ul>
-      <p class="mb-0">Si notas retrasos, revisa tu conexión y cierra otras pestañas que estén usando la cámara.</p>
-    </section>
-
-    <section id="privacy" class="card bm-shadow-sm p-4 mb-4">
-      <h3 class="fw-bold mb-3"><i class="fa-solid fa-shield-halved text-primary me-2"></i> Privacidad</h3>
-      <ul>
-        <li>Tu video y audio viajan <strong>peer-to-peer</strong> cifrados — nuestros servidores no los almacenan.</li>
-        <li>Los mensajes de chat se guardan asociados a la sala para el historial; puedes borrarlos al cerrar la reunión.</li>
-        <li>Las traducciones se procesan con servicios bajo contrato; no se usan para entrenar modelos públicos.</li>
-        <li>Solo los participantes invitados con el código de sala pueden unirse.</li>
-      </ul>
-      <p class="mb-0 small text-muted">Consulta la política completa contactando con el administrador del espacio de trabajo.</p>
-    </section>
-
-    <section id="faq" class="card bm-shadow-sm p-4 mb-4">
-      <h3 class="fw-bold mb-3"><i class="fa-solid fa-circle-question text-primary me-2"></i> Preguntas frecuentes</h3>
-
-      <div class="mb-3">
-        <h6 class="fw-bold mb-1">¿Necesito instalar algo?</h6>
-        <p class="text-muted mb-0">No. BiLingo Meet funciona en navegadores modernos (Chrome, Edge, Firefox, Safari) sin instalación.</p>
+    <!-- Hero -->
+    <div class="card bm-shadow-sm mb-4 border-0" style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #fff;">
+      <div class="card-body p-4 p-lg-5">
+        <div class="d-flex align-items-center mb-2">
+          <i class="fa-solid fa-circle-question fa-2x me-3"></i>
+          <h1 class="h2 mb-0 text-white">Centro de Ayuda</h1>
+        </div>
+        <p class="mb-0 opacity-75">
+          Aprendé a usar <strong>BiLingo Meet</strong> paso a paso: desde tu primera
+          registración hasta gestionar reuniones con traducción simultánea en tiempo real.
+        </p>
       </div>
-
-      <div class="mb-3">
-        <h6 class="fw-bold mb-1">¿Cuántas personas pueden unirse a una sala?</h6>
-        <p class="text-muted mb-0">Las salas estándar admiten hasta 8 participantes con video activo simultáneo.</p>
-      </div>
-
-      <div class="mb-3">
-        <h6 class="fw-bold mb-1">¿Qué idiomas están soportados?</h6>
-        <p class="text-muted mb-0">Más de 30 idiomas, incluyendo español, inglés, francés, alemán, portugués, italiano, japonés, coreano y chino mandarín.</p>
-      </div>
-
-      <div class="mb-3">
-        <h6 class="fw-bold mb-1">¿Puedo cambiar mi idioma preferido durante una reunión?</h6>
-        <p class="text-muted mb-0">Sí, desde tu perfil. Los nuevos mensajes te llegarán traducidos al idioma actualizado.</p>
-      </div>
-
-      <div class="mb-0">
-        <h6 class="fw-bold mb-1">¿Y si la traducción no es perfecta?</h6>
-        <p class="text-muted mb-0">El mensaje original siempre está disponible al pasar el ratón sobre el texto traducido, por si quieres ver el matiz exacto.</p>
-      </div>
-    </section>
-
-    <div class="text-center pt-3">
-      <a class="btn btn-outline-primary" href="/"><i class="fa-solid fa-arrow-left me-1"></i> Volver al inicio</a>
     </div>
+
+    <!-- Intro -->
+    <section id="intro" class="card bm-shadow-sm p-4 mb-4">
+      <h3 class="fw-bold mb-3"><i class="fa-solid fa-flag text-primary me-2"></i> Introducción</h3>
+      <p class="text-muted">
+        BiLingo Meet es una plataforma de videoconferencias con
+        <strong>traducción simultánea por IA</strong>. Cada participante habla en su
+        idioma y los demás lo escuchan automáticamente traducido al suyo.
+      </p>
+      <div class="row g-3 mt-1">
+        <div class="col-md-4">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body text-center">
+              <i class="fa-solid fa-microphone fa-2x text-primary mb-2"></i>
+              <h6 class="fw-bold">Voz natural</h6>
+              <p class="small text-muted mb-0">Traducción de audio en tiempo real con IA.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body text-center">
+              <i class="fa-solid fa-users fa-2x text-success mb-2"></i>
+              <h6 class="fw-bold">Multiusuario</h6>
+              <p class="small text-muted mb-0">Múltiples participantes, cada uno en su idioma.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body text-center">
+              <i class="fa-solid fa-coins fa-2x text-warning mb-2"></i>
+              <h6 class="fw-bold">Créditos por empresa</h6>
+              <p class="small text-muted mb-0">Consumo controlado y previsible.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1. Registro -->
+    <section id="registro" class="card bm-shadow-sm p-4 mb-4">
+      <div class="d-flex align-items-center mb-3">
+        <span class="badge bg-primary rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:1rem;">1</span>
+        <h3 class="fw-bold mb-0">Registrar el primer usuario</h3>
+      </div>
+      <p>
+        Cuando entrás por primera vez a la plataforma, hacé clic en
+        <strong>"Registrate"</strong> desde la página principal.
+      </p>
+      <div class="card border-light bg-light mb-3">
+        <div class="card-body">
+          <ol class="mb-0">
+            <li class="mb-2">Completá tu <strong>nombre</strong>, <strong>email</strong> y una <strong>contraseña</strong> segura.</li>
+            <li class="mb-2">Ingresá el <strong>código de empresa</strong> que recibiste (por ejemplo <code>ACME-2026</code>). Este código vincula tu cuenta a una organización con créditos asignados.</li>
+            <li class="mb-2">Vas a recibir un <strong>email de activación</strong>. Hacé clic en el enlace para verificar tu cuenta.</li>
+            <li class="mb-0">Una vez verificado, podés <strong>iniciar sesión</strong> normalmente.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="alert alert-info d-flex align-items-start gap-2 mb-0">
+        <i class="fa-solid fa-circle-info mt-1"></i>
+        <div class="small mb-0">
+          El <strong>primer usuario</strong> que se registre con el código de una empresa
+          queda automáticamente como <strong>administrador de esa empresa</strong>
+          (rol <code>company_admin</code>). Podrá luego invitar y gestionar al resto del equipo.
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Dashboard -->
+    <section id="dashboard" class="card bm-shadow-sm p-4 mb-4">
+      <div class="d-flex align-items-center mb-3">
+        <span class="badge bg-primary rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:1rem;">2</span>
+        <h3 class="fw-bold mb-0">Recorrido por el Dashboard</h3>
+      </div>
+      <p>Después de iniciar sesión vas al <strong>Dashboard</strong>, tu centro de control:</p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <h6 class="fw-bold"><i class="fa-solid fa-bolt text-warning me-2"></i>Acciones rápidas</h6>
+              <ul class="small mb-0">
+                <li><strong>Nueva reunión</strong> — crea una sala instantánea.</li>
+                <li><strong>Programar reunión</strong> — agenda una para más tarde.</li>
+                <li><strong>Unirse con código</strong> — entra a una sala existente.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <h6 class="fw-bold"><i class="fa-solid fa-list text-primary me-2"></i>Mis reuniones</h6>
+              <p class="small mb-0">
+                Lista de tus salas activas, programadas e historial. Hacé clic en
+                cualquiera para ver detalles, copiar el enlace o entrar.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <h6 class="fw-bold"><i class="fa-solid fa-bars-staggered text-success me-2"></i>Barra lateral</h6>
+              <ul class="small mb-0">
+                <li><strong>Panel</strong>, <strong>Contactos</strong>, <strong>Mis reuniones</strong>, <strong>Perfil</strong>.</li>
+                <li>Si sos admin: <strong>Administración</strong> y <strong>Consumo de mi empresa</strong>.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <h6 class="fw-bold"><i class="fa-solid fa-user-circle text-info me-2"></i>Tu perfil</h6>
+              <p class="small mb-0">
+                En <strong>Perfil</strong> configurás tu <strong>idioma nativo</strong> y el
+                <strong>idioma al que querés que te traduzcan</strong> durante las reuniones.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Usuarios -->
+    <section id="usuarios" class="card bm-shadow-sm p-4 mb-4">
+      <div class="d-flex align-items-center mb-3">
+        <span class="badge bg-primary rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:1rem;">3</span>
+        <h3 class="fw-bold mb-0">Agregar nuevos usuarios</h3>
+      </div>
+      <p>
+        Como <strong>administrador de empresa</strong>, podés invitar a más miembros del equipo.
+        Hay dos formas:
+      </p>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="card border-success h-100">
+            <div class="card-body">
+              <h6 class="text-success fw-bold"><i class="fa-solid fa-envelope me-2"></i>Opción A — Invitación por email</h6>
+              <ol class="small mb-0">
+                <li>Andá al menú <strong>Administración → Usuarios</strong>.</li>
+                <li>Hacé clic en <strong>"Invitar usuario"</strong>.</li>
+                <li>Ingresá el email del nuevo miembro y elegí su rol (usuario o admin).</li>
+                <li>Recibirá un email con un enlace de activación.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card border-info h-100">
+            <div class="card-body">
+              <h6 class="text-info fw-bold"><i class="fa-solid fa-key me-2"></i>Opción B — Código de empresa</h6>
+              <ol class="small mb-0">
+                <li>Compartile a tu equipo el <strong>código de tu empresa</strong>.</li>
+                <li>Cada uno se registra solo desde la página de Registro.</li>
+                <li>Quedan automáticamente vinculados a tu empresa.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-warning small d-flex align-items-start gap-2 mb-0">
+        <i class="fa-solid fa-triangle-exclamation mt-1"></i>
+        <div>
+          Los <strong>roles</strong> disponibles son:
+          <code>user</code> (puede crear y unirse a reuniones) y
+          <code>company_admin</code> (además puede gestionar usuarios y ver consumo).
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Salas -->
+    <section id="salas" class="card bm-shadow-sm p-4 mb-4">
+      <div class="d-flex align-items-center mb-3">
+        <span class="badge bg-primary rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:1rem;">4</span>
+        <h3 class="fw-bold mb-0">Crear salas de reunión</h3>
+      </div>
+
+      <h6 class="mt-2 fw-bold"><i class="fa-solid fa-bolt text-warning me-1"></i> Reunión instantánea</h6>
+      <ol>
+        <li>Desde el Panel, hacé clic en <strong>"Nueva reunión"</strong>.</li>
+        <li>Se crea una sala con un <strong>código único</strong> (por ejemplo <code>ABC-123</code>).</li>
+        <li>Ingresás a la sala de espera y podés invitar participantes mientras tanto.</li>
+      </ol>
+
+      <h6 class="mt-4 fw-bold"><i class="fa-solid fa-calendar-days text-primary me-1"></i> Reunión programada</h6>
+      <ol>
+        <li>Hacé clic en <strong>"Programar reunión"</strong>.</li>
+        <li>Completá <strong>título</strong>, <strong>fecha y hora</strong> y, opcionalmente, una descripción.</li>
+        <li>La sala queda agendada y aparece en tu lista. Podés compartir el enlace desde ese momento.</li>
+        <li>La reunión se activa cuando llegás a la hora programada.</li>
+      </ol>
+
+      <div class="card bg-light border-0 mt-3 mb-0">
+        <div class="card-body small">
+          <i class="fa-solid fa-lightbulb text-warning me-1"></i>
+          Cada sala tiene un <strong>código único</strong> y un <strong>enlace directo</strong>.
+          Ambos sirven para que otros se unan.
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Invitar -->
+    <section id="invitar" class="card bm-shadow-sm p-4 mb-4">
+      <div class="d-flex align-items-center mb-3">
+        <span class="badge bg-primary rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:1rem;">5</span>
+        <h3 class="fw-bold mb-0">Invitar y compartir el enlace</h3>
+      </div>
+      <p>Una vez que tenés una sala, hay 3 maneras de invitar:</p>
+
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body text-center">
+              <i class="fa-solid fa-link fa-2x text-primary mb-2"></i>
+              <h6 class="fw-bold">Enlace directo</h6>
+              <p class="small text-muted mb-0">
+                Botón <strong>"Copiar enlace"</strong>. Pegalo en WhatsApp, email, calendario, etc.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body text-center">
+              <i class="fa-solid fa-hashtag fa-2x text-success mb-2"></i>
+              <h6 class="fw-bold">Código de sala</h6>
+              <p class="small text-muted mb-0">
+                Compartí el código (ej. <code>ABC-123</code>). Los invitados lo ingresan en
+                <strong>"Unirse con código"</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body text-center">
+              <i class="fa-solid fa-envelope-circle-check fa-2x text-info mb-2"></i>
+              <h6 class="fw-bold">Invitación por email</h6>
+              <p class="small text-muted mb-0">
+                Desde la sala, agregá emails y los invitados reciben el enlace en su correo.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-info mt-3 mb-0 small d-flex align-items-start gap-2">
+        <i class="fa-solid fa-user-check mt-1"></i>
+        <div>
+          Los invitados <strong>no necesitan tener cuenta</strong> para unirse:
+          pueden entrar como invitados ingresando solo su nombre e idioma.
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Dentro de la reunión -->
+    <section id="reunion" class="card bm-shadow-sm p-4 mb-4">
+      <div class="d-flex align-items-center mb-3">
+        <span class="badge bg-primary rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:1rem;">6</span>
+        <h3 class="fw-bold mb-0">Dentro de la reunión</h3>
+      </div>
+
+      <p>Cuando entrás a una sala:</p>
+      <ul>
+        <li><strong>Lobby (sala de espera)</strong>: probás tu micrófono, cámara y elegís tu idioma.</li>
+        <li><strong>En reunión</strong>: ves a los participantes, el chat, controles de audio/video y subtítulos opcionales.</li>
+        <li><strong>Traducción automática</strong>: hablás en tu idioma; los demás te escuchan traducido al suyo.</li>
+        <li><strong>Cambiar idioma en vivo</strong>: desde el menú de la reunión podés cambiar el idioma de salida.</li>
+        <li><strong>Finalizar</strong>: el host puede cerrar la sala; el resto puede salir individualmente.</li>
+      </ul>
+
+      <div class="alert alert-secondary small d-flex align-items-start gap-2 mb-0">
+        <i class="fa-solid fa-microphone-slash mt-1"></i>
+        <div>
+          <strong>Importante:</strong> mantené el micrófono <strong>silenciado</strong>
+          cuando no estés hablando para evitar consumo innecesario de créditos
+          y mejorar la calidad de la traducción.
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. Créditos -->
+    <section id="creditos" class="card bm-shadow-sm p-4 mb-4">
+      <div class="d-flex align-items-center mb-3">
+        <span class="badge bg-primary rounded-circle me-2 d-inline-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:1rem;">7</span>
+        <h3 class="fw-bold mb-0">Créditos y consumo</h3>
+      </div>
+
+      <p>
+        Cada empresa tiene un <strong>saldo de créditos</strong> que se consume con el uso
+        de la traducción por IA. Como administrador podés monitorear todo desde
+        <strong>"Consumo de mi empresa"</strong> en el menú lateral.
+      </p>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <div class="card border-success h-100">
+            <div class="card-body">
+              <div class="small text-muted">Saldo disponible</div>
+              <div class="h5 text-success mb-0 fw-bold">Créditos restantes</div>
+              <div class="small text-muted mt-1">Cuántos créditos te quedan ahora.</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <div class="small text-muted">Total acreditado</div>
+              <div class="h5 mb-0 fw-bold">Histórico</div>
+              <div class="small text-muted mt-1">Suma de todos los créditos cargados.</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <div class="small text-muted">Total consumido</div>
+              <div class="h5 mb-0 fw-bold">Uso histórico</div>
+              <div class="small text-muted mt-1">Suma de todo lo que la empresa gastó.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p>
+        En la misma pantalla vas a ver gráficos de <strong>consumo diario</strong>, costo por
+        modelo, los usuarios que más consumen y un detalle de las últimas
+        llamadas a la IA — todo en USD, ya con el factor de tu empresa aplicado.
+      </p>
+
+      <div class="alert alert-info small d-flex align-items-start gap-2 mb-0">
+        <i class="fa-solid fa-circle-info mt-1"></i>
+        <div>
+          El consumo se debita <strong>al finalizar cada reunión</strong>, en base a los
+          minutos efectivos de traducción y los modelos de IA utilizados.
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. Más créditos -->
+    <section id="mas-creditos" class="mb-4">
+      <div class="card border-0" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff;">
+        <div class="card-body text-center p-4 p-lg-5">
+          <i class="fa-solid fa-envelope-open-text fa-3x mb-3 opacity-75"></i>
+          <h3 class="fw-bold mb-2 text-white">¿Necesitás más créditos?</h3>
+          <p class="mb-4 opacity-90">
+            Si tu empresa necesita más créditos para seguir usando la traducción
+            simultánea, escribinos y te asistimos con la recarga.
+          </p>
+          <a href="mailto:fhansen3@gmail.com?subject=Solicitud%20de%20cr%C3%A9ditos%20-%20BiLingo%20Meet"
+             class="btn btn-light btn-lg fw-bold shadow">
+            <i class="fa-solid fa-paper-plane me-2"></i>
+            fhansen3@gmail.com
+          </a>
+          <div class="small mt-3 opacity-75">
+            Incluí en tu mensaje: nombre de la empresa, código y cantidad estimada de créditos.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tips -->
+    <section id="tips" class="card bm-shadow-sm p-4 mb-4">
+      <h3 class="fw-bold mb-3"><i class="fa-solid fa-lightbulb text-warning me-2"></i>Consejos y buenas prácticas</h3>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <h6 class="fw-bold"><i class="fa-solid fa-headphones text-primary me-2"></i>Usá auriculares</h6>
+              <p class="small text-muted mb-0">Evita el eco y mejora drásticamente la calidad de la traducción.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <h6 class="fw-bold"><i class="fa-solid fa-wifi text-success me-2"></i>Conexión estable</h6>
+              <p class="small text-muted mb-0">Una buena conexión reduce reintentos y consumo innecesario.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <h6 class="fw-bold"><i class="fa-solid fa-microphone text-danger me-2"></i>Silenciá cuando no hablás</h6>
+              <p class="small text-muted mb-0">Evita que ruidos ambientales gasten créditos.</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 bg-light">
+            <div class="card-body">
+              <h6 class="fw-bold"><i class="fa-solid fa-language text-info me-2"></i>Configurá tus idiomas</h6>
+              <p class="small text-muted mb-0">Hacelo en "Perfil" antes de tu primera reunión.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA final -->
+    <div class="card bg-light border-0 text-center mb-2">
+      <div class="card-body p-4">
+        <h5 class="fw-bold mb-2">¿Otra duda?</h5>
+        <p class="text-muted mb-3">Escribinos directamente, te respondemos a la brevedad.</p>
+        <a href="mailto:fhansen3@gmail.com" class="btn btn-primary">
+          <i class="fa-solid fa-envelope me-2"></i> fhansen3@gmail.com
+        </a>
+      </div>
+    </div>
+
   </div>
 </div>
+
+<style>
+  .help-toc .nav-link {
+    color: #64748b;
+    border-left: 3px solid transparent;
+    border-radius: 0;
+    transition: all .15s ease;
+  }
+  .help-toc .nav-link:hover {
+    color: #4f46e5;
+    background: #f8fafc;
+    border-left-color: #c7d2fe;
+  }
+  .help-toc .nav-link.active {
+    color: #4f46e5;
+    background: #eef2ff;
+    border-left-color: #4f46e5;
+    font-weight: 600;
+  }
+  html { scroll-behavior: smooth; }
+  section { scroll-margin-top: 5rem; }
+</style>
+
+<script>
+(function(){
+  var links = document.querySelectorAll('.help-toc .nav-link');
+  if (!links.length) return;
+  var sections = Array.from(links).map(function(l){
+    var id = l.getAttribute('href').slice(1);
+    return document.getElementById(id);
+  });
+  function onScroll(){
+    var pos = window.scrollY + 120;
+    var idx = 0;
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i] && sections[i].offsetTop <= pos) idx = i;
+    }
+    links.forEach(function(l, i){ l.classList.toggle('active', i === idx); });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>

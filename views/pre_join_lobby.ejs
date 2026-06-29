@@ -18,8 +18,11 @@
         </div>
 
         <div class="ratio ratio-16x9 bg-dark rounded mb-3 position-relative overflow-hidden">
+          <!-- object-fit:contain → muestra la imagen completa de la cámara sin recortar
+               (evita el efecto de "zoom" en móviles donde la cámara suele ser 4:3 y el
+               contenedor es 16:9). El espacio sobrante queda con el fondo oscuro. -->
           <video id="lobbyPreview" autoplay muted playsinline
-                 style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
+                 style="width:100%;height:100%;object-fit:contain;transform:scaleX(-1);background:#000;"></video>
           <div id="lobbyPreviewMsg"
                class="position-absolute top-50 start-50 translate-middle text-white text-center small"
                style="display:none;">
@@ -235,8 +238,23 @@
     micHid.value = micId || '';
     spkHid.value = spkSel.value || '';
 
+    // Constraints "amables" para móvil: usamos `ideal` (no `exact`) en
+    // resolución y dejamos que el navegador escoja el aspect ratio nativo
+    // de la cámara. Forzar 1280x720 estricto hacía que el navegador
+    // recortara la imagen para cumplir el ratio → efecto "zoom" en la cara.
+    var videoConstraints;
+    if (camOn) {
+      videoConstraints = {
+        facingMode: 'user',
+        width:  { ideal: 1280 },
+        height: { ideal: 720 }
+      };
+      if (camId) videoConstraints.deviceId = { exact: camId };
+    } else {
+      videoConstraints = false;
+    }
     var constraints = {
-      video: camOn ? (camId ? { deviceId: { exact: camId } } : true) : false,
+      video: videoConstraints,
       audio: micOn ? (micId ? { deviceId: { exact: micId } } : true) : false
     };
 

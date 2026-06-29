@@ -2,19 +2,80 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
-    <h1 class="h3 mb-1">Costos de IA</h1>
+    <h1 class="h3 mb-1">
+      <% if (isSuper) { %>Costos de IA<% } else { %>Consumo de mi empresa<% } %>
+    </h1>
     <p class="text-muted mb-0">
-      <% if (isSuper) { %>Vista global de toda la plataforma.<% } else { %>Vista de tu empresa.<% } %>
+      <% if (isSuper) { %>
+        Vista global de toda la plataforma (costos reales de OpenAI).
+      <% } else if (companyInfo) { %>
+        <strong><%= companyInfo.name %></strong> · Código <code><%= companyInfo.code %></code>
+      <% } else { %>
+        Vista de tu empresa.
+      <% } %>
     </p>
   </div>
-  <form method="get" class="d-flex align-items-center gap-2">
-    <label class="small text-muted mb-0">Margen objetivo:</label>
-    <input type="number" name="margin" value="<%= marginPct %>" min="0" max="1000" step="10"
-           class="form-control form-control-sm" style="width:90px;">
-    <span class="small text-muted">%</span>
-    <button type="submit" class="btn btn-sm btn-outline-primary">Aplicar</button>
-  </form>
+  <% if (isSuper) { %>
+    <form method="get" class="d-flex align-items-center gap-2">
+      <label class="small text-muted mb-0">Margen objetivo:</label>
+      <input type="number" name="margin" value="<%= marginPct %>" min="0" max="1000" step="10"
+             class="form-control form-control-sm" style="width:90px;">
+      <span class="small text-muted">%</span>
+      <button type="submit" class="btn btn-sm btn-outline-primary">Aplicar</button>
+    </form>
+  <% } else if (typeof markup !== 'undefined' && markup !== 1) { %>
+    <div class="text-end">
+      <div class="small text-muted">Factor de tu empresa</div>
+      <div class="h5 mb-0">
+        <span class="badge bg-primary"><i class="fa-solid fa-xmark me-1"></i><%= Number(markup).toFixed(2) %></span>
+      </div>
+      <div class="small text-muted">ya aplicado a los importes</div>
+    </div>
+  <% } %>
 </div>
+
+<% if (!isSuper) { %>
+  <div class="alert alert-info d-flex align-items-start gap-2 py-2 px-3 mb-3">
+    <i class="fa-solid fa-circle-info mt-1"></i>
+    <div class="small">
+      Todos los importes en USD que ves a continuación corresponden al
+      <strong>consumo de tu empresa</strong>, ya con el factor configurado
+      por la plataforma aplicado. No son los costos crudos de OpenAI.
+    </div>
+  </div>
+<% } %>
+
+<% if (!isSuper && creditBalance) { %>
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <div class="card border-success h-100">
+        <div class="card-body">
+          <div class="text-muted small">Saldo de créditos</div>
+          <div class="display-6 fw-bold text-success">
+            <%= Number(creditBalance.balance || 0).toLocaleString() %>
+          </div>
+          <div class="small text-muted mt-1">créditos disponibles</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small">Total acreditado</div>
+          <div class="h4 mb-0"><%= Number(creditBalance.total_added || 0).toLocaleString() %></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small">Total consumido</div>
+          <div class="h4 mb-0"><%= Number(creditBalance.total_consumed || 0).toLocaleString() %></div>
+        </div>
+      </div>
+    </div>
+  </div>
+<% } %>
 
 <!-- KPIs -->
 <div class="row g-3 mb-4">
@@ -61,20 +122,35 @@
         <div class="text-muted small mb-1">Minutos de audio procesados</div>
         <div class="h4 mb-0"><%= audioMinutes.toFixed(1) %> min</div>
       </div>
-      <div class="col-md-4">
-        <div class="text-muted small mb-1">Costo por minuto (real)</div>
-        <div class="h4 mb-0">$<%= costPerMinute.toFixed(4) %></div>
-      </div>
-      <div class="col-md-4">
-        <div class="text-muted small mb-1">
-          Precio sugerido por minuto
-          <span class="badge bg-success ms-1">+<%= marginPct %>% margen</span>
+      <% if (isSuper) { %>
+        <div class="col-md-4">
+          <div class="text-muted small mb-1">Costo por minuto (real)</div>
+          <div class="h4 mb-0">$<%= costPerMinute.toFixed(4) %></div>
         </div>
-        <div class="h3 mb-0 text-success">$<%= suggestedPricePerMinute.toFixed(4) %></div>
-        <% if (audioMinutes <= 0) { %>
-          <div class="small text-muted mt-1"><i class="fa-solid fa-circle-info me-1"></i>Aún no hay minutos de audio procesados.</div>
-        <% } %>
-      </div>
+        <div class="col-md-4">
+          <div class="text-muted small mb-1">
+            Precio sugerido por minuto
+            <span class="badge bg-success ms-1">+<%= marginPct %>% margen</span>
+          </div>
+          <div class="h3 mb-0 text-success">$<%= suggestedPricePerMinute.toFixed(4) %></div>
+          <% if (audioMinutes <= 0) { %>
+            <div class="small text-muted mt-1"><i class="fa-solid fa-circle-info me-1"></i>Aún no hay minutos de audio procesados.</div>
+          <% } %>
+        </div>
+      <% } else { %>
+        <div class="col-md-4">
+          <div class="text-muted small mb-1">Costo por minuto</div>
+          <div class="h4 mb-0">$<%= costPerMinute.toFixed(4) %></div>
+          <div class="small text-muted">para tu empresa</div>
+        </div>
+        <div class="col-md-4">
+          <div class="text-muted small mb-1">Gasto total acumulado</div>
+          <div class="h3 mb-0 text-success">$<%= Number(totals.cost_total || 0).toFixed(2) %></div>
+          <% if (audioMinutes <= 0) { %>
+            <div class="small text-muted mt-1"><i class="fa-solid fa-circle-info me-1"></i>Aún no hay minutos de audio procesados.</div>
+          <% } %>
+        </div>
+      <% } %>
     </div>
   </div>
 </div>

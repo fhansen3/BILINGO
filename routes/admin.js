@@ -40,41 +40,83 @@ const AVATAR_COLORS = ['#58CC02', '#1CB0F6', '#FF9600', '#CE82FF', '#FF4B4B', '#
 // when the app is mounted at "/" (direct port) and behind the proxy
 // (/run/<id>/ or /project-<u>/<p>/).
 //
-// We MUST NOT return a bare relative string like "admin/users" because the
-// browser would resolve it against the *current* request path. E.g. a POST
-// to /admin/companies resolving "admin/companies" yields /admin/admin/companies.
+// CRITICAL: this MUST NEVER return a path with a leading "/" unless we have
+// genuinely detected the proxy prefix. A bare "/admin/users" handed to
+// res.redirect() emits a Location header of "/admin/users", which the
+// BROWSER then resolves against the SITE ROOT — escaping our reverse proxy
+// (/run/<id>/) and landing the user on the parent platform's /admin/users
+// (which doesn't exist). That is the #1 source of "the admin link redirects
+// me out of the app" bugs.
 //
-// We MUST return an absolute path that includes the proxy prefix. Detection
-// order (most reliable first):
-//   1. The X-Forwarded-Prefix header (set by some reverse proxies).
-//   2. The diff between req.originalUrl and req.url (Express strips the
-//      mount path; if the app is proxied at /run/<id>, the originalUrl will
-//      contain it before req.url's path).
-//   3. The BASE_PATH env var injected by the runtime.
-//   4. Empty (direct-port access).
+// Detection order (most reliable first):
+//   1. req.basePrefix (populated by middleware/basePrefix.js from
+//      X-Forwarded-Prefix / X-Forwarded-Path / X-Script-Name / BASE_PATH).
+//   2. Re-read the same headers directly (in case the middleware wasn't run).
+//   3. BASE_PATH env var injected by the runtime.
+//   4. Fall back to a RELATIVE path ("../admin/users") computed from the
+//      CURRENT request URL — never a leading slash.
 function detectPrefix(req) {
-  // 1. Standard reverse-proxy header
-  const fp = req && req.headers && (req.headers['x-forwarded-prefix'] || req.headers['x-forwarded-path']);
-  if (fp) return String(fp).replace(/\/+$/, '');
-  // 2. Diff originalUrl vs url
-  if (req && req.originalUrl && req.url) {
-    // originalUrl is the full request line as received; req.url is what Express sees
-    // after stripping any app.use() mount paths. For a proxy prefix, both should be
-    // the same UNLESS the proxy forwarded the prefix as part of the path — which
-    // typically it does NOT (the proxy strips its own prefix). So this branch is
-    // rarely useful, but cheap.
-    const idx = req.originalUrl.indexOf(req.url);
-    if (idx > 0) return req.originalUrl.slice(0, idx).replace(/\/+$/, '');
+  // 1. Middleware-populated value (preferred)
+  if (req && typeof req.basePrefix === 'string' && req.basePrefix) {
+    return req.basePrefix.replace(/\/+$/, '');
+  }
+  // 2. Re-read proxy headers (defensive)
+  const fp = req && req.headers && (
+    req.headers['x-forwarded-prefix'] ||
+    req.headers['x-forwarded-path']   ||
+    req.headers['x-script-name']
+  );
+  if (fp) {
+    let p = String(fp).trim();
+    if (p && !p.startsWith('/')) p = '/' + p;
+    return p.replace(/\/+$/, '');
   }
   // 3. BASE_PATH from runtime
-  if (process.env.BASE_PATH) return process.env.BASE_PATH.replace(/\/+$/, '');
+  if (process.env.BASE_PATH) {
+    let p = String(process.env.BASE_PATH).trim();
+    if (p && !p.startsWith('/')) p = '/' + p;
+    return p.replace(/\/+$/, '');
+  }
   return '';
 }
 
-function adminPath(target, req) {
-  const base = req ? detectPrefix(req) : (process.env.BASE_PATH || '').replace(/\/+$/, '');
+// Compute a relative path that takes us from the CURRENT request URL up to
+// the app root, then appends `target`. Used as the safe fallback when no
+// proxy prefix can be detected — guarantees we never emit a leading-slash
+// Location header that would escape the proxy.
+//
+// Example:
+//   req.originalUrl = "/admin/users/5/suspend", target = "admin/users"
+//   → currentPath segments = ["admin","users","5","suspend"]  (4 segments)
+//   → we want to go UP 4 levels and then to "admin/users"
+//   → "../../../../admin/users"
+function relativeToAppRoot(req, target) {
   const t = String(target || '').replace(/^\/+/, '');
-  return base + '/' + t;
+  const url = (req && req.originalUrl) || (req && req.url) || '/';
+  // strip querystring, split into segments, drop empties
+  const pathOnly = url.split('?')[0];
+  const segs = pathOnly.split('/').filter(Boolean);
+  // The last segment is the resource; we want to walk back to the app root.
+  // For a path "/admin/users/5/suspend" we have 4 segments — so 4 "../".
+  const ups = segs.length > 0 ? '../'.repeat(segs.length) : '';
+  return ups + t;
+}
+
+function adminPath(target, req) {
+  const t = String(target || '').replace(/^\/+/, '');
+  const prefix = detectPrefix(req);
+  if (prefix) {
+    // We KNOW the proxy prefix — emit an absolute path that includes it.
+    // e.g. "/run/184" + "/" + "admin/users" → "/run/184/admin/users"
+    return prefix + '/' + t;
+  }
+  // No prefix detected. NEVER emit a leading slash here — the browser would
+  // resolve it against the site root and escape the proxy. Instead emit a
+  // path that walks back to the app root using "../" segments.
+  if (req) return relativeToAppRoot(req, t);
+  // Last-resort (no req at all): bare relative path. Caller should always
+  // pass req, but if they didn't, a bare relative is still safer than "/".
+  return t;
 }
 
 
@@ -141,7 +183,7 @@ function buildActivationUrl(req, token) {
 // GET /admin → redirect
 // ---------------------------------------------------------------------------
 router.get('/admin', requireAuth, loadAdminContext, (req, res) => {
-  return res.redirect(adminPath('admin/users'));
+  return res.redirect(adminPath('admin/users', req));
 });
 
 // ---------------------------------------------------------------------------
@@ -716,7 +758,16 @@ router.get('/admin/usage', requireAuth, loadAdminContext, async (req, res, next)
 });
 
 // ---------------------------------------------------------------------------
-// GET /admin/costs  (NEW — token & USD spend panel)
+// GET /admin/costs  (token & USD spend panel)
+//
+// Visibility model:
+//   - superadmin / admin → ven el COSTO CRUDO en USD (lo que pagamos a OpenAI)
+//     y pueden mover el slider "margen objetivo" para simular precio sugerido.
+//   - company_admin       → ven el COSTO DE SU EMPRESA, que es:
+//                                cost_usd_crudo * credit_markup
+//     Es decir, NO ven nunca el costo real de OpenAI ni el margen — ven
+//     directamente lo que esa empresa "gasta" según el multiplicador
+//     configurado por el superadmin (companies.credit_markup).
 // ---------------------------------------------------------------------------
 router.get('/admin/costs', requireAuth, loadAdminContext, async (req, res, next) => {
   try {
@@ -724,6 +775,7 @@ router.get('/admin/costs', requireAuth, loadAdminContext, async (req, res, next)
     const marginPctRaw = parseInt(req.query.margin || '100', 10);
     const marginPct = Math.max(0, Math.min(1000, isFinite(marginPctRaw) ? marginPctRaw : 100));
 
+    // Cargar todo en paralelo
     const [totals, audioMin, byModel, topUsers, recent, daily] = await Promise.all([
       costs.getTotals(companyId),
       costs.getAudioMinutes(companyId),
@@ -733,6 +785,43 @@ router.get('/admin/costs', requireAuth, loadAdminContext, async (req, res, next)
       costs.getDailyCost(companyId, 30)
     ]);
     const topCompanies = isSuper(req) ? await costs.getTopCompanies(10) : [];
+
+    // ============== APLICAR MULTIPLICADOR PARA COMPANY_ADMIN ==============
+    let markup = 1;
+    let companyInfo = null;
+    let creditBalance = null;
+    if (!isSuper(req) && companyId) {
+      const rows = await db.query(
+        'SELECT id, code, name, credit_markup, credit_low_threshold FROM companies WHERE id = ?',
+        [companyId]
+      );
+      if (rows.length) {
+        companyInfo = rows[0];
+        markup = Number(rows[0].credit_markup) || 1;
+      }
+      // Saldo de créditos de la empresa
+      try {
+        const balRows = await db.query(
+          'SELECT balance, total_added, total_consumed FROM company_credits WHERE company_id = ?',
+          [companyId]
+        );
+        if (balRows.length) creditBalance = balRows[0];
+      } catch (_) {}
+
+      // Aplicar el multiplicador a TODAS las cifras de USD que la vista muestra
+      if (markup !== 1) {
+        totals.cost_today = Number(totals.cost_today || 0) * markup;
+        totals.cost_7d    = Number(totals.cost_7d    || 0) * markup;
+        totals.cost_30d   = Number(totals.cost_30d   || 0) * markup;
+        totals.cost_total = Number(totals.cost_total || 0) * markup;
+
+        (byModel || []).forEach(m => { m.cost_usd = Number(m.cost_usd || 0) * markup; });
+        (topUsers || []).forEach(u => { u.cost_usd = Number(u.cost_usd || 0) * markup; });
+        (recent  || []).forEach(c => { c.total_cost_usd = Number(c.total_cost_usd || 0) * markup; });
+        (daily   || []).forEach(d => { d.cost_usd = Number(d.cost_usd || 0) * markup; });
+      }
+    }
+    // ======================================================================
 
     const audioMinutes = Number(audioMin || 0);
     const costPerMinute = audioMinutes > 0 ? Number(totals.cost_total || 0) / audioMinutes : 0;
@@ -759,7 +848,11 @@ router.get('/admin/costs', requireAuth, loadAdminContext, async (req, res, next)
       topCompanies,
       topUsers,
       recent,
-      dailyChart
+      dailyChart,
+      // Para company_admin: info extra para la vista
+      markup,
+      companyInfo,
+      creditBalance
     });
   } catch (err) { next(err); }
 });

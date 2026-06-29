@@ -19,13 +19,17 @@
     <a class="nav-link <%= (typeof active !== 'undefined' && active === 'profile') ? 'active' : '' %>" href="profile">
       <i class="fa-solid fa-user me-2"></i> Perfil
     </a>
+    <a class="nav-link <%= (typeof active !== 'undefined' && active === 'help') ? 'active' : '' %>" href="help">
+      <i class="fa-solid fa-circle-question me-2"></i> Ayuda
+    </a>
     <% if (typeof user !== 'undefined' && user && (user.role === 'superadmin' || user.role === 'admin' || user.role === 'company_admin')) { %>
       <hr>
       <a class="nav-link <%= (typeof active !== 'undefined' && active === 'admin') ? 'active' : '' %>" href="admin">
         <i class="fa-solid fa-shield-halved me-2"></i> Administración
       </a>
       <a class="nav-link <%= (typeof active !== 'undefined' && active === 'admin-costs') ? 'active' : '' %>" href="admin/costs">
-        <i class="fa-solid fa-chart-line me-2"></i> Consumos y costos
+        <i class="fa-solid fa-chart-line me-2"></i>
+        <% if (user.role === 'company_admin') { %>Consumo de mi empresa<% } else { %>Consumos y costos<% } %>
       </a>
       <% if (user.role === 'superadmin' || user.role === 'admin') { %>
         <a class="nav-link <%= (typeof active !== 'undefined' && active === 'admin-users') ? 'active' : '' %>" href="admin/users">
@@ -36,5 +40,10 @@
         </a>
       <% } %>
     <% } %>
+
+    <hr>
+    <a class="nav-link <%= (typeof active !== 'undefined' && active === 'help') ? 'active' : '' %>" href="help">
+      <i class="fa-solid fa-circle-question me-2"></i> Ayuda
+    </a>
   </nav>
 </aside>

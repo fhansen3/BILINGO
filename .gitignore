@@ -33,3 +33,12 @@ nul
 
 # Backups
 *.original
+
+# Project bundles & DB dumps (no subir a GitHub)
+*.tar.gz
+*.zip
+bilingo-meet-dump.sql
+dump-err.log
+
+# Research / scratch
+research/

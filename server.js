@@ -26,6 +26,7 @@ const env = require('./config/env');
 console.log('[boot] env loaded, port =', env.port);
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/errors');
+const { basePrefixMiddleware } = require('./middleware/basePrefix');
 const { attachSockets } = require('./sockets');
 const { setIO } = require('./sockets/io');
 
@@ -39,9 +40,18 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(expressLayouts);
 app.set('layout', 'layout');
 
+// Trust the reverse-proxy so req.protocol / req.ip work correctly, and the
+// proxy headers we read in basePrefixMiddleware are taken at face value.
+app.set('trust proxy', true);
+
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
+
+// Detect the public URL prefix from X-Forwarded-Prefix / BASE_PATH and expose
+// it as req.basePrefix + res.locals.basePath/baseHref. MUST run before any
+// route or render so EJS can use <base href="<%= baseHref %>">.
+app.use(basePrefixMiddleware);
 
 // cookie-session for server-rendered auth flows
 app.use(cookieSession({

@@ -17,6 +17,7 @@
 const router = require('express').Router();
 const db = require('../config/db');
 const { requireAuth } = require('../middleware/requireAuth');
+const { bp } = require('../middleware/basePrefix');
 const { hashPassword, verifyPassword } = require('../utils/hash');
 const costsService = require('../services/costs.service');
 const creditsService = require('../services/credits.service');
@@ -294,7 +295,7 @@ router.post('/profile', requireAuth, async (req, res, next) => {
     if (req.accepts(['html', 'json']) === 'json') {
       return res.json({ ok: true, user: full });
     }
-    return res.redirect('/profile?saved=1');
+    return res.redirect(bp(req, 'profile?saved=1'));
   } catch (err) { next(err); }
 });
 
@@ -344,10 +345,10 @@ router.post('/account-settings/voice', requireAuth, async (req, res, next) => {
     if (v === 'auto' || v === '') {
       v = null; // automática por género
     } else if (!VALID_VOICES.includes(v)) {
-      return res.redirect('/account-settings?voiceerr=' + encodeURIComponent('Voz no válida.'));
+      return res.redirect(bp(req, 'account-settings?voiceerr=' + encodeURIComponent('Voz no válida.')));
     }
     await db.query('UPDATE users SET preferred_voice = ? WHERE id = ?', [v, req.user.id]);
-    return res.redirect('/account-settings?voicesaved=1');
+    return res.redirect(bp(req, 'account-settings?voicesaved=1'));
   } catch (err) { next(err); }
 });
 
@@ -362,28 +363,28 @@ router.post('/account-settings/password', requireAuth, async (req, res, next) =>
     const confirm = String(req.body.confirmPassword || req.body.confirm_password || '');
 
     if (!current || !next_) {
-      return res.redirect('/account-settings?pwerr=' + encodeURIComponent('Introduce la contraseña actual y la nueva.'));
+      return res.redirect(bp(req, 'account-settings?pwerr=' + encodeURIComponent('Introduce la contraseña actual y la nueva.')));
     }
     if (next_.length < 6) {
-      return res.redirect('/account-settings?pwerr=' + encodeURIComponent('La nueva contraseña debe tener al menos 6 caracteres.'));
+      return res.redirect(bp(req, 'account-settings?pwerr=' + encodeURIComponent('La nueva contraseña debe tener al menos 6 caracteres.')));
     }
     if (next_ !== confirm) {
-      return res.redirect('/account-settings?pwerr=' + encodeURIComponent('La confirmación no coincide.'));
+      return res.redirect(bp(req, 'account-settings?pwerr=' + encodeURIComponent('La confirmación no coincide.')));
     }
 
     const rows = await db.query('SELECT id, password_hash FROM users WHERE id = ?', [req.user.id]);
     if (!rows.length) {
-      return res.redirect('/account-settings?pwerr=' + encodeURIComponent('Usuario no encontrado.'));
+      return res.redirect(bp(req, 'account-settings?pwerr=' + encodeURIComponent('Usuario no encontrado.')));
     }
     const ok = await verifyPassword(current, rows[0].password_hash);
     if (!ok) {
-      return res.redirect('/account-settings?pwerr=' + encodeURIComponent('La contraseña actual no es correcta.'));
+      return res.redirect(bp(req, 'account-settings?pwerr=' + encodeURIComponent('La contraseña actual no es correcta.')));
     }
 
     const hash = await hashPassword(next_);
     await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user.id]);
 
-    return res.redirect('/account-settings?pwsaved=1');
+    return res.redirect(bp(req, 'account-settings?pwsaved=1'));
   } catch (err) { next(err); }
 });
 
@@ -397,25 +398,25 @@ router.post('/account-settings/delete', requireAuth, async (req, res, next) => {
     const password = String(req.body.password || '');
 
     if (confirmText !== 'ELIMINAR') {
-      return res.redirect('/account-settings?delerr=' + encodeURIComponent('Para confirmar, escribe ELIMINAR.'));
+      return res.redirect(bp(req, 'account-settings?delerr=' + encodeURIComponent('Para confirmar, escribe ELIMINAR.')));
     }
 
     const rows = await db.query('SELECT id, password_hash FROM users WHERE id = ?', [req.user.id]);
     if (!rows.length) {
-      return res.redirect('/account-settings?delerr=' + encodeURIComponent('Usuario no encontrado.'));
+      return res.redirect(bp(req, 'account-settings?delerr=' + encodeURIComponent('Usuario no encontrado.')));
     }
     if (!password) {
-      return res.redirect('/account-settings?delerr=' + encodeURIComponent('Introduce tu contraseña para confirmar.'));
+      return res.redirect(bp(req, 'account-settings?delerr=' + encodeURIComponent('Introduce tu contraseña para confirmar.')));
     }
     const ok = await verifyPassword(password, rows[0].password_hash);
     if (!ok) {
-      return res.redirect('/account-settings?delerr=' + encodeURIComponent('La contraseña no es correcta.'));
+      return res.redirect(bp(req, 'account-settings?delerr=' + encodeURIComponent('La contraseña no es correcta.')));
     }
 
     await db.query('DELETE FROM users WHERE id = ?', [req.user.id]);
     if (req.session) req.session = null;
     res.clearCookie('token');
-    return res.redirect('/?deleted=1');
+    return res.redirect(bp(req, '?deleted=1'));
   } catch (err) { next(err); }
 });
 

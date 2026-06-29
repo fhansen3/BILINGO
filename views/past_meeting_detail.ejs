@@ -42,7 +42,7 @@
 
   <div class="flex-grow-1 px-3 px-lg-4 py-3" style="min-width:0">
     <div class="mb-3">
-      <a href="/history" class="text-decoration-none small text-muted">
+      <a href="history" class="text-decoration-none small text-muted">
         <i class="fa-solid fa-arrow-left me-1"></i> Volver al historial
       </a>
     </div>
@@ -61,10 +61,10 @@
           </div>
           <% if (m.save_transcript) { %>
             <div class="d-flex gap-2">
-              <a href="/m/<%= m.room_code %>/transcript.txt" class="btn btn-outline-secondary btn-sm">
+              <a href="m/<%= m.room_code %>/transcript.txt" class="btn btn-outline-secondary btn-sm">
                 <i class="fa-solid fa-file-lines me-1"></i> .txt
               </a>
-              <a href="/m/<%= m.room_code %>/transcript.json" class="btn btn-outline-secondary btn-sm">
+              <a href="m/<%= m.room_code %>/transcript.json" class="btn btn-outline-secondary btn-sm">
                 <i class="fa-solid fa-file-code me-1"></i> .json
               </a>
             </div>

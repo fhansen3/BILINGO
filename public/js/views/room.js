@@ -86,7 +86,15 @@
       .rv-btn.muted   { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
       .room-tiles { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); flex:1; min-height:200px; }
       .tile { position:relative; background:#0b0f17; border-radius:12px; overflow:hidden; aspect-ratio:16/9; box-shadow:0 4px 16px rgba(0,0,0,.12); }
-      .tile video { width:100%; height:100%; object-fit:cover; background:#000; }
+      /* object-fit:contain → muestra la imagen completa de la cámara sin recortar (sin efecto "zoom"
+         en móviles, donde la cámara suele ser 4:3 y el tile es 16:9). Los espacios sobrantes
+         quedan cubiertos por el fondo oscuro del .tile. */
+      .tile video { width:100%; height:100%; object-fit:contain; background:#000; display:block; }
+      /* En pantallas pequeñas (móvil), dejamos que el tile siga la relación natural de la
+         cámara para evitar barras laterales innecesarias. */
+      @media (max-width: 640px) {
+        .tile { aspect-ratio:auto; min-height:200px; }
+      }
       .tile .tile-label { position:absolute; left:8px; bottom:8px; background:rgba(0,0,0,.55); color:#fff; padding:3px 8px; border-radius:6px; font-size:12px; }
       .tile .tile-caption { position:absolute; left:8px; right:8px; bottom:36px; background:rgba(0,0,0,.6); color:#fff; padding:6px 10px; border-radius:6px; font-size:13px; line-height:1.3; max-height:40%; overflow:hidden; }
       .tile.local::after { display:none; }
@@ -200,9 +208,19 @@
     // ── Local media ────────────────────────────────────────────────────
     let localStream = null;
     try {
+      // IMPORTANT: usamos `ideal` (no min/exact) y dejamos que el navegador
+      // elija el aspect ratio nativo de la cámara. Forzar 1280x720 estricto
+      // en móvil hacía que el navegador recortara la imagen para cumplir el
+      // ratio → efecto "zoom" en la cara. Con `ideal`, en móviles la
+      // cámara frontal típica entrega 640x480 (4:3) o similar y vemos la
+      // escena completa.
       localStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
-        video: { width: 1280, height: 720 }
+        video: {
+          facingMode: 'user',
+          width:  { ideal: 1280 },
+          height: { ideal: 720 }
+        }
       });
     } catch (e) {
       ui.status.textContent = 'No se pudo acceder a cámara: ' + (e.message || e) + ' — intentando solo audio…';

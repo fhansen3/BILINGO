@@ -1,85 +1,36 @@
 (function () {
   'use strict';
 
-  var LANGUAGES = [
-    'Spanish', 'English', 'French', 'German', 'Italian', 'Portuguese', 'Japanese',
-    'Chinese', 'Korean', 'Russian', 'Arabic', 'Dutch', 'Swedish', 'Polish', 'Turkish',
-    'Hindi', 'Vietnamese', 'Thai', 'Greek', 'Hebrew', 'Czech', 'Finnish', 'Danish'
-  ];
-
-  function langOptions() {
-    return '<option value="">Selecciona…</option>' +
-      LANGUAGES.map(function (l) { return '<option value="' + l + '">' + l + '</option>'; }).join('');
-  }
+  // NOTE: este archivo era el formulario de registro de la SPA antigua, que pedía
+  // dos idiomas (nativo + "de trabajo") y NO pedía código de empresa. El flujo
+  // de registro vigente vive en el formulario server-rendered en views/signup.ejs
+  // — pide solo el idioma nativo y el código de empresa, hace al primer usuario
+  // de una empresa nueva company_admin con 500 créditos de bienvenida, y si el
+  // código ya existe muestra el email del admin de esa empresa para que el
+  // usuario solicite el alta.
+  //
+  // Por compatibilidad con cualquier link/bookmark que aún apunte a #/register,
+  // este módulo simplemente redirige al formulario real.
 
   function render(container) {
     container.innerHTML =
-      '<div class="app-shell">' +
-        '<nav class="navbar-bl">' +
-          '<a href="#/landing" class="brand" style="text-decoration:none"><span class="parrot">🦜</span> BiLingo Meet</a>' +
-          '<div class="nav-links">' +
-            '<a href="#/login" class="nav-link"><i class="fa-solid fa-right-to-bracket"></i> Iniciar sesión</a>' +
-          '</div>' +
-        '</nav>' +
-        '<div class="auth-page">' +
-          '<form class="auth-card" id="reg-form" style="max-width:520px">' +
-            '<h2>Únete a BiLingo Meet <span style="font-size:1.8rem">🎉</span></h2>' +
-            '<p class="auth-sub">Reuniones sin barreras de idioma para tu equipo internacional</p>' +
-            '<div class="field">' +
-              '<label>Nombre para mostrar</label>' +
-              '<input type="text" name="displayName" required maxlength="100" placeholder="Cómo te llaman">' +
-            '</div>' +
-            '<div class="field">' +
-              '<label>Email</label>' +
-              '<input type="email" name="email" required placeholder="tu@email.com">' +
-            '</div>' +
-            '<div class="field">' +
-              '<label>Contraseña</label>' +
-              '<input type="password" name="password" required minlength="6" placeholder="Mínimo 6 caracteres">' +
-            '</div>' +
-            '<div class="field-row">' +
-              '<div class="field">' +
-                '<label>Tu idioma nativo</label>' +
-                '<select name="nativeLanguage">' + langOptions() + '</select>' +
-              '</div>' +
-              '<div class="field">' +
-                '<label>Idioma de trabajo</label>' +
-                '<select name="learningLanguage">' + langOptions() + '</select>' +
-              '</div>' +
-            '</div>' +
-            '<div class="field">' +
-              '<label>País</label>' +
-              '<input type="text" name="country" maxlength="80" placeholder="Ej: España, México, Argentina…">' +
-            '</div>' +
-            '<button type="submit" class="btn-bl btn-green" style="width:100%"><i class="fa-solid fa-user-plus"></i> Crear cuenta</button>' +
-            '<div class="auth-footer">¿Ya tienes cuenta? <a href="#/login">Inicia sesión</a></div>' +
-          '</form>' +
+      '<div class="auth-page" style="text-align:center;padding:3rem 1rem">' +
+        '<div class="auth-card" style="max-width:420px;margin:0 auto">' +
+          '<h2><span style="font-size:1.6rem">🦜</span> Crear cuenta</h2>' +
+          '<p class="auth-sub" style="margin:.5rem 0 1.25rem">Te llevamos al formulario de registro…</p>' +
+          '<a href="signup" class="btn-bl btn-green" style="display:inline-block">' +
+            '<i class="fa-solid fa-user-plus"></i> Ir al registro' +
+          '</a>' +
         '</div>' +
       '</div>';
 
-    var form = container.querySelector('#reg-form');
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      var btn = form.querySelector('button[type=submit]');
-      btn.disabled = true;
-      var d = new FormData(form);
-      try {
-        await window.Auth.register({
-          email: d.get('email'),
-          password: d.get('password'),
-          displayName: d.get('displayName'),
-          nativeLanguage: d.get('nativeLanguage'),
-          learningLanguage: d.get('learningLanguage'),
-          country: d.get('country')
-        });
-        window.UI.notify('¡Bienvenido a BiLingo Meet! 🦜', 'success');
-        window.Router.navigate('dashboard');
-      } catch (err) {
-        window.UI.notify(err.message || 'Error al registrarte', 'error');
-        btn.disabled = false;
-      }
-    });
+    // Redirección inmediata por JS (sin leading slash → respeta el proxy).
+    setTimeout(function () {
+      try { window.location.assign('signup'); } catch (_) {}
+    }, 50);
   }
 
-  window.Router.register('register', render);
+  if (window.Router && typeof window.Router.register === 'function') {
+    window.Router.register('register', render);
+  }
 })();

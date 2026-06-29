@@ -39,6 +39,7 @@ const router = require('express').Router();
 const crypto = require('crypto');
 const db = require('../config/db');
 const { requireAuth } = require('../middleware/requireAuth');
+const { bp } = require('../middleware/basePrefix');
 const { generateMeetingCode } = require('../utils/code');
 
 // ---------------------------------------------------------------------------
@@ -144,7 +145,7 @@ async function createInstant(req, res, next) {
       [code, req.user.id, topic, languageFocus, durationLimitMin, saveTranscript]
     );
 
-    return res.redirect(`/m/${code}/lobby`);
+    return res.redirect(bp(req, `m/${code}/lobby`));
   } catch (err) { next(err); }
 }
 
@@ -296,7 +297,7 @@ router.post('/schedule', requireAuth, async (req, res, next) => {
       );
     }
 
-    return res.redirect(`/m/${code}`);
+    return res.redirect(bp(req, `m/${code}`));
   } catch (err) { next(err); }
 });
 
@@ -713,9 +714,9 @@ router.post('/m/:code/join', requireAuth, async (req, res, next) => {
     }
 
     if (initialStatus === 'waiting') {
-      return res.redirect(`/m/${meeting.room_code}/waiting`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/waiting`));
     }
-    return res.redirect(`/m/${meeting.room_code}/room`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/room`));
   } catch (err) { next(err); }
 });
 
@@ -729,7 +730,7 @@ router.get('/m/:code/waiting', requireAuth, async (req, res, next) => {
     if (!meeting) return notFound(req, res);
 
     const pid = req.session && req.session.activeParticipantId;
-    if (!pid) return res.redirect(`/m/${meeting.room_code}/lobby`);
+    if (!pid) return res.redirect(bp(req, `m/${meeting.room_code}/lobby`));
 
     const rows = await db.query(
       `SELECT id, room_id, display_name, status
@@ -738,9 +739,9 @@ router.get('/m/:code/waiting', requireAuth, async (req, res, next) => {
       [pid, meeting.id]
     );
     const participant = rows[0];
-    if (!participant) return res.redirect(`/m/${meeting.room_code}/lobby`);
+    if (!participant) return res.redirect(bp(req, `m/${meeting.room_code}/lobby`));
     if (participant.status === 'admitted') {
-      return res.redirect(`/m/${meeting.room_code}/room`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/room`));
     }
 
     res.render('waiting_room', {
@@ -810,7 +811,7 @@ router.get('/m/:code/room', requireAuth, async (req, res, next) => {
 
     // If the user hasn't been through the lobby yet, send them there.
     if (!participant) {
-      return res.redirect(`/m/${meeting.room_code}/lobby`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/lobby`));
     }
     // If they're still in the waiting room, bounce them to the waiting page.
     if (participant.status === 'waiting') {
@@ -819,11 +820,11 @@ router.get('/m/:code/room', requireAuth, async (req, res, next) => {
         req.session.activeParticipantId = participant.id;
         req.session.activeMeetingCode   = meeting.room_code;
       }
-      return res.redirect(`/m/${meeting.room_code}/waiting`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/waiting`));
     }
     // Denied / left → back to dashboard.
     if (participant.status !== 'admitted') {
-      return res.redirect('/dashboard');
+      return res.redirect(bp(req, 'dashboard'));
     }
 
     // Promote the room to 'active' once the first admitted user enters.
@@ -910,7 +911,7 @@ router.get('/m/:code/settings', requireAuth, async (req, res, next) => {
     if (!meeting) return notFound(req, res);
 
     const participant = await loadMyParticipant(meeting.id, req.user && req.user.id);
-    if (!participant) return res.redirect(`/m/${meeting.room_code}/lobby`);
+    if (!participant) return res.redirect(bp(req, `m/${meeting.room_code}/lobby`));
 
     const languages = await loadLanguages();
 
@@ -940,7 +941,7 @@ router.post('/m/:code/participants/me', requireAuth, async (req, res, next) => {
     if (!meeting) return notFound(req, res);
 
     const participant = await loadMyParticipant(meeting.id, req.user && req.user.id);
-    if (!participant) return res.redirect(`/m/${meeting.room_code}/lobby`);
+    if (!participant) return res.redirect(bp(req, `m/${meeting.room_code}/lobby`));
 
     const body = req.body || {};
     const languages = await loadLanguages();
@@ -1029,7 +1030,7 @@ router.post('/m/:code/participants/me', requireAuth, async (req, res, next) => {
     if (wantsJson) {
       return res.json({ ok: true });
     }
-    return res.redirect(`/m/${meeting.room_code}/settings?saved=1`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/settings?saved=1`));
   } catch (err) { next(err); }
 });
 
@@ -1163,7 +1164,7 @@ router.post('/m/:code/leave', requireAuth, async (req, res, next) => {
       req.session.activeParticipantId = null;
     }
 
-    return res.redirect(`/m/${meeting.room_code}/ended`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/ended`));
   } catch (err) { next(err); }
 });
 
@@ -1316,7 +1317,7 @@ router.post('/m/:code/feedback', requireAuth, async (req, res, next) => {
 
     if (translationQuality == null && audioQuality == null && !comments) {
       // nothing to save — redirect back without error
-      return res.redirect(`/m/${meeting.room_code}/ended`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/ended`));
     }
 
     // Find the user's participant row (if any) for richer linkage.
@@ -1339,7 +1340,7 @@ router.post('/m/:code/feedback', requireAuth, async (req, res, next) => {
        participantId, translationQuality, audioQuality, comments]
     );
 
-    return res.redirect(`/m/${meeting.room_code}/ended?fb=1`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/ended?fb=1`));
   } catch (err) { next(err); }
 });
 
@@ -1782,7 +1783,7 @@ router.post('/m/:code/host/mute-all', requireAuth, requireHost, async (req, res,
       by: req.user.id,
       at: Date.now()
     });
-    return res.redirect(`/m/${meeting.room_code}/host`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/host`));
   } catch (err) { next(err); }
 });
 
@@ -1794,13 +1795,13 @@ router.post('/m/:code/host/mute/:pid', requireAuth, requireHost, async (req, res
     const meeting = req.meeting;
     const pid = Number(req.params.pid);
     if (!Number.isFinite(pid) || pid <= 0) {
-      return res.status(400).redirect(`/m/${meeting.room_code}/host`);
+      return res.status(400).redirect(bp(req, `m/${meeting.room_code}/host`));
     }
     const rows = await db.query(
       `SELECT id, user_id, display_name FROM meeting_participants WHERE id = ? AND room_id = ?`,
       [pid, meeting.id]
     );
-    if (!rows.length) return res.redirect(`/m/${meeting.room_code}/host`);
+    if (!rows.length) return res.redirect(bp(req, `m/${meeting.room_code}/host`));
     emitToRoom(meeting.id, 'host:mute', {
       meetingId: meeting.id,
       participantId: pid,
@@ -1808,7 +1809,7 @@ router.post('/m/:code/host/mute/:pid', requireAuth, requireHost, async (req, res
       displayName: rows[0].display_name,
       by: req.user.id
     });
-    return res.redirect(`/m/${meeting.room_code}/host`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/host`));
   } catch (err) { next(err); }
 });
 
@@ -1820,16 +1821,16 @@ router.post('/m/:code/host/remove/:pid', requireAuth, requireHost, async (req, r
     const meeting = req.meeting;
     const pid = Number(req.params.pid);
     if (!Number.isFinite(pid) || pid <= 0) {
-      return res.status(400).redirect(`/m/${meeting.room_code}/host`);
+      return res.status(400).redirect(bp(req, `m/${meeting.room_code}/host`));
     }
     const rows = await db.query(
       `SELECT id, user_id, display_name FROM meeting_participants WHERE id = ? AND room_id = ?`,
       [pid, meeting.id]
     );
-    if (!rows.length) return res.redirect(`/m/${meeting.room_code}/host`);
+    if (!rows.length) return res.redirect(bp(req, `m/${meeting.room_code}/host`));
     // Don't allow removing the host themselves.
     if (rows[0].user_id === meeting.host_id) {
-      return res.redirect(`/m/${meeting.room_code}/host`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/host`));
     }
     await db.query(
       `UPDATE meeting_participants
@@ -1849,7 +1850,7 @@ router.post('/m/:code/host/remove/:pid', requireAuth, requireHost, async (req, r
       displayName: rows[0].display_name,
       by: req.user.id
     });
-    return res.redirect(`/m/${meeting.room_code}/host`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/host`));
   } catch (err) { next(err); }
 });
 
@@ -1873,7 +1874,7 @@ router.post('/m/:code/host/lock', requireAuth, requireHost, async (req, res, nex
       isLocked: !!next,
       by: req.user.id
     });
-    return res.redirect(`/m/${meeting.room_code}/host`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/host`));
   } catch (err) { next(err); }
 });
 
@@ -1892,7 +1893,7 @@ router.post('/m/:code/host/waiting-room', requireAuth, requireHost, async (req, 
       waitingRoomEnabled: !!next,
       by: req.user.id
     });
-    return res.redirect(`/m/${meeting.room_code}/host`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/host`));
   } catch (err) { next(err); }
 });
 
@@ -1904,14 +1905,14 @@ router.post('/m/:code/host/admit/:pid', requireAuth, requireHost, async (req, re
     const meeting = req.meeting;
     const pid = Number(req.params.pid);
     if (!Number.isFinite(pid) || pid <= 0) {
-      return res.redirect(`/m/${meeting.room_code}/host`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/host`));
     }
     const rows = await db.query(
       `SELECT id, user_id, status FROM meeting_participants WHERE id = ? AND room_id = ?`,
       [pid, meeting.id]
     );
     if (!rows.length || rows[0].status !== 'waiting') {
-      return res.redirect(`/m/${meeting.room_code}/host`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/host`));
     }
     await db.query(
       `UPDATE meeting_participants
@@ -1944,7 +1945,7 @@ router.post('/m/:code/host/admit/:pid', requireAuth, requireHost, async (req, re
       userId: rows[0].user_id,
       by: req.user.id
     });
-    return res.redirect(`/m/${meeting.room_code}/host`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/host`));
   } catch (err) { next(err); }
 });
 
@@ -1956,13 +1957,13 @@ router.post('/m/:code/host/deny/:pid', requireAuth, requireHost, async (req, res
     const meeting = req.meeting;
     const pid = Number(req.params.pid);
     if (!Number.isFinite(pid) || pid <= 0) {
-      return res.redirect(`/m/${meeting.room_code}/host`);
+      return res.redirect(bp(req, `m/${meeting.room_code}/host`));
     }
     const rows = await db.query(
       `SELECT id, user_id, status FROM meeting_participants WHERE id = ? AND room_id = ?`,
       [pid, meeting.id]
     );
-    if (!rows.length) return res.redirect(`/m/${meeting.room_code}/host`);
+    if (!rows.length) return res.redirect(bp(req, `m/${meeting.room_code}/host`));
     await db.query(
       `UPDATE meeting_participants SET status = 'denied' WHERE id = ?`,
       [pid]
@@ -1990,7 +1991,7 @@ router.post('/m/:code/host/deny/:pid', requireAuth, requireHost, async (req, res
       userId: rows[0].user_id,
       by: req.user.id
     });
-    return res.redirect(`/m/${meeting.room_code}/host`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/host`));
   } catch (err) { next(err); }
 });
 
@@ -2054,7 +2055,7 @@ router.post('/m/:code/host/end', requireAuth, requireHost, async (req, res, next
       req.session.activeParticipantId = null;
     }
 
-    return res.redirect(`/m/${meeting.room_code}/ended`);
+    return res.redirect(bp(req, `m/${meeting.room_code}/ended`));
   } catch (err) { next(err); }
 });
 

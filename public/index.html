@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    The reverse-proxy injects a <base href="/run/<id>/"> tag at request time
+    when serving this static file, so relative paths below (css/, js/, etc.)
+    resolve correctly under /run/184/ AND under /project-xxx/xxx/ AND under
+    a future custom domain. Do NOT hardcode a leading slash anywhere.
+  -->
   <title>BiLingo Meet · Reuniones de trabajo sin barreras de idioma</title>
   <meta name="description" content="Plataforma de videollamadas para equipos globales. Chat con traducción en tiempo real para que cada participante se comunique en su propio idioma.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🦜%3C/text%3E%3C/svg%3E">
