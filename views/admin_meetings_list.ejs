@@ -1,0 +1,157 @@
+<%- include('partials/admin-subnav', { active: 'meetings' }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-video text-primary me-2"></i>Llamadas</h1>
+    <p class="text-muted mb-0">
+      <% if (isSuper) { %>Todas las llamadas de la plataforma.<% } else { %>Llamadas de tu empresa.<% } %>
+    </p>
+  </div>
+</div>
+
+<!-- Filtros -->
+<form method="get" class="card mb-3">
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label small mb-1">Buscar</label>
+        <input type="text" class="form-control form-control-sm" name="search" value="<%= filters.search %>"
+               placeholder="Código, tema, anfitrión, email">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Desde</label>
+        <input type="date" class="form-control form-control-sm" name="from" value="<%= filters.from %>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Hasta</label>
+        <input type="date" class="form-control form-control-sm" name="to" value="<%= filters.to %>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Estado</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="">Todos</option>
+          <option value="active" <%= filters.status==='active' ? 'selected' : '' %>>Activa</option>
+          <option value="ended"  <%= filters.status==='ended'  ? 'selected' : '' %>>Finalizada</option>
+          <option value="waiting"<%= filters.status==='waiting'? 'selected' : '' %>>En espera</option>
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button class="btn btn-sm btn-primary flex-fill"><i class="fa-solid fa-filter me-1"></i>Filtrar</button>
+        <a href="admin/meetings" class="btn btn-sm btn-outline-secondary" title="Limpiar"><i class="fa-solid fa-xmark"></i></a>
+      </div>
+    </div>
+  </div>
+</form>
+
+<!-- KPIs agregados -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Llamadas</div>
+      <div class="display-6 fw-bold"><%= totals.meetings.toLocaleString() %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Costo IA total</div>
+      <div class="display-6 fw-bold">$<%= Number(totals.cost_usd).toFixed(4) %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Créditos debitados</div>
+      <div class="display-6 fw-bold text-warning"><%= Number(totals.credits).toLocaleString() %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Llamadas degradadas</div>
+      <div class="display-6 fw-bold <%= totals.degraded ? 'text-danger' : '' %>"><%= totals.degraded %></div>
+      <div class="small text-muted">Latencia &gt; 3s</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header bg-white"><strong>Lista (<%= meetings.length %>)</strong></div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Sala</th>
+          <% if (isSuper) { %><th>Empresa</th><% } %>
+          <th>Anfitrión</th>
+          <th class="text-center">Estado</th>
+          <th class="text-center">Particip.</th>
+          <th class="text-end">Duración</th>
+          <th class="text-end">Calls IA</th>
+          <th class="text-end">Latencia avg</th>
+          <th class="text-end">Degradadas</th>
+          <th class="text-end">Costo USD</th>
+          <th class="text-end">Créditos</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (meetings || []).forEach(function(m){
+          var avgLat = Math.round(Number(m.avg_latency_ms || 0));
+          var latClass = avgLat > 3000 ? 'text-danger' : (avgLat > 1500 ? 'text-warning' : 'text-success');
+          var dur = Number(m.duration_seconds || 0);
+          var mins = Math.floor(dur/60);
+          var secs = dur % 60;
+          var durTxt = mins + ':' + (secs<10?'0':'') + secs;
+          var statusBadge = {
+            active:  'bg-success',
+            ended:   'bg-secondary',
+            closed:  'bg-secondary',
+            waiting: 'bg-warning text-dark'
+          }[m.status] || 'bg-light text-dark';
+        %>
+          <tr>
+            <td class="small text-muted">
+              <%= m.ended_at
+                  ? new Date(m.ended_at).toISOString().replace('T',' ').slice(0,16)
+                  : (m.started_at
+                     ? new Date(m.started_at).toISOString().replace('T',' ').slice(0,16)
+                     : new Date(m.created_at).toISOString().replace('T',' ').slice(0,16)) %>
+            </td>
+            <td><code><%= m.room_code %></code><% if (m.topic) { %><div class="small text-muted"><%= m.topic %></div><% } %></td>
+            <% if (isSuper) { %>
+              <td class="small">
+                <% if (m.company_name) { %>
+                  <code class="me-1"><%= m.company_code %></code><%= m.company_name %>
+                <% } else { %>
+                  <em class="text-muted">—</em>
+                <% } %>
+              </td>
+            <% } %>
+            <td class="small"><%= m.host_name || m.host_email || '—' %></td>
+            <td class="text-center"><span class="badge <%= statusBadge %>"><%= m.status %></span></td>
+            <td class="text-center"><%= m.participant_count %></td>
+            <td class="text-end small"><%= durTxt %></td>
+            <td class="text-end small"><%= Number(m.calls || 0).toLocaleString() %></td>
+            <td class="text-end small <%= latClass %>"><%= avgLat ? avgLat + ' ms' : '—' %></td>
+            <td class="text-end small"><%= Number(m.degraded_count || 0).toLocaleString() %></td>
+            <td class="text-end small fw-bold">$<%= Number(m.cost_usd || 0).toFixed(4) %></td>
+            <td class="text-end small">
+              <% if (m.credits_debited != null) { %>
+                <span class="text-warning fw-bold"><%= Math.abs(Number(m.credits_debited)).toLocaleString() %></span>
+              <% } else { %>
+                <span class="text-muted">—</span>
+              <% } %>
+            </td>
+            <td class="text-end">
+              <a href="admin/meetings/<%= m.id %>" class="btn btn-sm btn-outline-primary">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </a>
+            </td>
+          </tr>
+        <% }); %>
+        <% if (!meetings || !meetings.length) { %>
+          <tr><td colspan="<%= isSuper ? 13 : 12 %>" class="text-center text-muted py-4">No hay llamadas que coincidan con los filtros.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>

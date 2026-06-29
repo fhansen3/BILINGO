@@ -1,0 +1,239 @@
+<%- include('partials/admin-subnav', { active: 'meetings' }) %>
+
+<%
+  var m = data.meeting;
+  var c = data.cost || {};
+  var l = data.latency || {};
+  var degraded = Number(l.degraded_count || 0);
+  var logCount = Number(l.log_count || 0);
+  var degradedPct = logCount > 0 ? (degraded / logCount * 100) : 0;
+  var dur = Number(m.duration_seconds || 0);
+  var durTxt = Math.floor(dur/60) + ':' + ((dur%60)<10?'0':'') + (dur%60);
+  function fmtMs(x){ x = Number(x||0); return x ? Math.round(x) + ' ms' : '—'; }
+  function fmtTs(d){ return d ? new Date(d).toISOString().replace('T',' ').slice(0,19) : '—'; }
+%>
+
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb small mb-0">
+    <li class="breadcrumb-item"><a href="admin/meetings">Llamadas</a></li>
+    <li class="breadcrumb-item active"><%= m.room_code || ('#' + m.id) %></li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">
+      <i class="fa-solid fa-video text-primary me-2"></i>
+      Llamada <code><%= m.room_code %></code>
+      <span class="badge ms-2 <%= m.status==='active' ? 'bg-success' : (m.status==='ended' ? 'bg-secondary' : 'bg-warning text-dark') %>"><%= m.status %></span>
+    </h1>
+    <p class="text-muted mb-0">
+      <% if (m.topic) { %><%= m.topic %> · <% } %>
+      <% if (m.language_focus) { %>Idioma: <%= m.language_focus %> · <% } %>
+      <% if (m.company_name) { %>Empresa: <code><%= m.company_code %></code> <%= m.company_name %><% } %>
+    </p>
+  </div>
+  <div class="text-end">
+    <div class="small text-muted">Inicio</div>
+    <div><%= fmtTs(m.started_at) %></div>
+    <div class="small text-muted mt-1">Fin</div>
+    <div><%= fmtTs(m.ended_at) %></div>
+  </div>
+</div>
+
+<!-- KPIs principales -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Duración</div>
+      <div class="display-6 fw-bold"><%= durTxt %></div>
+      <div class="small text-muted"><%= data.participants.length %> participantes</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Costo IA</div>
+      <div class="display-6 fw-bold">$<%= Number(c.cost_usd || 0).toFixed(4) %></div>
+      <div class="small text-muted"><%= Number(c.calls || 0).toLocaleString() %> calls · <%= Number(c.tokens || 0).toLocaleString() %> tokens</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Latencia avg</div>
+      <% var avgLat = Math.round(Number(l.avg_total || 0)); var avgLatClass = avgLat > 3000 ? 'text-danger' : (avgLat > 1500 ? 'text-warning' : 'text-success'); %>
+      <div class="display-6 fw-bold <%= avgLatClass %>"><%= avgLat ? avgLat + ' ms' : '—' %></div>
+      <div class="small text-muted">p95: <%= fmtMs(l.p95) %> · p99: <%= fmtMs(l.p99) %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Calidad</div>
+      <div class="display-6 fw-bold <%= degraded > 0 ? 'text-warning' : 'text-success' %>">
+        <%= degraded ? degraded : '✓' %>
+      </div>
+      <div class="small text-muted">
+        <% if (degraded > 0) { %>
+          eventos degradados (<%= degradedPct.toFixed(1) %>%)
+        <% } else { %>
+          sin eventos degradados
+        <% } %>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<!-- Débito de créditos -->
+<% if (data.debit) { %>
+  <div class="card mb-4 border-warning">
+    <div class="card-body">
+      <div class="d-flex align-items-center gap-3">
+        <div class="display-6 text-warning"><i class="fa-solid fa-coins"></i></div>
+        <div class="flex-grow-1">
+          <div class="small text-muted">Débito de créditos aplicado</div>
+          <div class="h4 mb-0 text-warning"><%= Math.abs(Number(data.debit.amount)).toLocaleString() %> créditos</div>
+          <div class="small text-muted">
+            Costo IA: $<%= Number(data.debit.cost_usd || 0).toFixed(6) %>
+            · Markup: ×<%= Number(data.debit.markup || 1).toFixed(3) %>
+            · Aplicado: <%= fmtTs(data.debit.created_at) %>
+          </div>
+        </div>
+        <div class="text-end">
+          <div class="small text-muted">Saldo resultante</div>
+          <div class="h5 mb-0 <%= Number(data.debit.balance_after) < 0 ? 'text-danger' : '' %>">
+            <%= Number(data.debit.balance_after).toLocaleString() %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<% } else if (m.status === 'ended') { %>
+  <div class="alert alert-info">
+    <i class="fa-solid fa-circle-info me-1"></i>
+    No se aplicó débito (sin costo registrado o sin empresa asignada al anfitrión).
+  </div>
+<% } %>
+
+<!-- Desglose de latencia + Pares -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-white"><strong>Desglose de latencia</strong></div>
+      <div class="card-body">
+        <% if (Number(l.sampleCount || 0) === 0) { %>
+          <p class="text-muted text-center my-3">Sin datos de latencia para esta llamada.</p>
+        <% } else { %>
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td>Muestras</td><td class="text-end"><%= Number(l.sampleCount || 0).toLocaleString() %></td></tr>
+            <tr><td>Promedio total</td><td class="text-end fw-bold"><%= fmtMs(l.avg_total) %></td></tr>
+            <tr><td><span class="text-muted">└ STT (audio → texto)</span></td><td class="text-end"><%= fmtMs(l.avg_stt) %></td></tr>
+            <tr><td><span class="text-muted">└ MT (traducción)</span></td><td class="text-end"><%= fmtMs(l.avg_mt) %></td></tr>
+            <tr><td><span class="text-muted">└ TTS (texto → audio)</span></td><td class="text-end"><%= fmtMs(l.avg_tts) %></td></tr>
+            <tr><td>p50 (mediana)</td><td class="text-end"><%= fmtMs(l.p50) %></td></tr>
+            <tr><td>p95</td><td class="text-end <%= Number(l.p95||0) > 3000 ? 'text-danger fw-bold' : '' %>"><%= fmtMs(l.p95) %></td></tr>
+            <tr><td>p99</td><td class="text-end <%= Number(l.p99||0) > 3000 ? 'text-danger fw-bold' : '' %>"><%= fmtMs(l.p99) %></td></tr>
+            <tr><td>Eventos degradados</td><td class="text-end <%= degraded > 0 ? 'text-warning fw-bold' : '' %>"><%= degraded %> / <%= logCount %></td></tr>
+          </tbody>
+        </table>
+        <% } %>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-white"><strong>Pares de idiomas usados</strong></div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Par</th><th class="text-end">Mensajes</th><th class="text-end">Latencia avg</th></tr></thead>
+          <tbody>
+            <% (data.pairs || []).forEach(function(p){ %>
+              <tr>
+                <td><code><%= p.pair %></code></td>
+                <td class="text-end"><%= Number(p.n).toLocaleString() %></td>
+                <td class="text-end"><%= fmtMs(p.avg_ms) %></td>
+              </tr>
+            <% }); %>
+            <% if (!data.pairs || !data.pairs.length) { %>
+              <tr><td colspan="3" class="text-center text-muted py-3">Sin datos.</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Participantes -->
+<div class="card mb-4">
+  <div class="card-header bg-white"><strong>Participantes (<%= data.participants.length %>)</strong></div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr><th>Nombre</th><th>Nativo → Objetivo</th><th>Estado</th><th>Entró</th><th>Salió</th></tr>
+      </thead>
+      <tbody>
+        <% (data.participants || []).forEach(function(p){ %>
+          <tr>
+            <td><%= p.display_name %></td>
+            <td class="small text-muted"><%= p.native_language || '?' %> → <%= p.target_language || '?' %></td>
+            <td><span class="badge bg-light text-dark"><%= p.status %></span></td>
+            <td class="small text-muted"><%= fmtTs(p.joined_at) %></td>
+            <td class="small text-muted"><%= fmtTs(p.left_at) %></td>
+          </tr>
+        <% }); %>
+        <% if (!data.participants || !data.participants.length) { %>
+          <tr><td colspan="5" class="text-center text-muted py-3">Sin participantes registrados.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Timeline de mensajes traducidos -->
+<div class="card">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <strong>Timeline de traducciones</strong>
+    <span class="small text-muted">Últimos <%= (data.logs || []).length %> eventos · degradado = latencia &gt; <%= l.degradedThresholdMs %> ms</span>
+  </div>
+  <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+    <table class="table table-sm mb-0">
+      <thead class="sticky-top bg-white" style="top:0;">
+        <tr>
+          <th>Hora</th>
+          <th>Par</th>
+          <th class="text-end">STT</th>
+          <th class="text-end">MT</th>
+          <th class="text-end">TTS</th>
+          <th class="text-end">Total</th>
+          <th class="text-end">Chars</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (data.logs || []).forEach(function(log){
+          var t = Number(log.total_latency_ms || 0);
+          var rowClass = log.is_degraded ? 'table-warning' : '';
+          var totalClass = t > 3000 ? 'text-danger fw-bold' : (t > 1500 ? 'text-warning' : '');
+        %>
+          <tr class="<%= rowClass %>">
+            <td class="small text-muted"><%= log.created_at ? new Date(log.created_at).toISOString().slice(11,19) : '' %></td>
+            <td class="small"><code><%= log.source_lang || '?' %> → <%= log.target_lang || '?' %></code></td>
+            <td class="text-end small"><%= fmtMs(log.stt_latency_ms) %></td>
+            <td class="text-end small"><%= fmtMs(log.mt_latency_ms) %></td>
+            <td class="text-end small"><%= fmtMs(log.tts_latency_ms) %></td>
+            <td class="text-end small <%= totalClass %>"><%= fmtMs(log.total_latency_ms) %></td>
+            <td class="text-end small text-muted"><%= log.char_count || '—' %></td>
+            <td class="text-end">
+              <% if (log.is_degraded) { %>
+                <span class="badge bg-warning text-dark" title="Latencia &gt; 3s"><i class="fa-solid fa-bolt"></i></span>
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+        <% if (!data.logs || !data.logs.length) { %>
+          <tr><td colspan="8" class="text-center text-muted py-4">Sin eventos de traducción registrados.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -10,6 +10,14 @@
   </button>
 </div>
 
+<div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+  <i class="fa-solid fa-gift fa-lg"></i>
+  <div class="small">
+    <strong>Bono de bienvenida:</strong> cada empresa nueva recibe automáticamente
+    <strong>500 créditos gratuitos</strong> al crearse.
+  </div>
+</div>
+
 <% if (typeof flash !== 'undefined' && flash) { %>
   <div class="alert alert-success alert-dismissible fade show" role="alert">
     <%= flash %>
@@ -130,10 +138,14 @@
                  placeholder="ACMECO" style="letter-spacing:0.2em;font-weight:600;">
           <div class="form-text">Los usuarios introducirán este código al registrarse. Solo letras, exactamente 6.</div>
         </div>
+        <div class="alert alert-success d-flex align-items-center gap-2 py-2 mb-0 small" role="alert">
+          <i class="fa-solid fa-gift"></i>
+          <div>Esta empresa recibirá <strong>500 créditos gratuitos</strong> al crearse.</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
-        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus me-1"></i> Crear empresa</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-gift me-1"></i> Crear con 500 créditos</button>
       </div>
     </form>
   </div>

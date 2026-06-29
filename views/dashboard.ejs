@@ -40,6 +40,40 @@
       <% } %>
     </div>
 
+    <% if (typeof creditBalance !== 'undefined' && creditBalance && (creditBalance.isLow || creditBalance.isNegative)) {
+        var balance = Number(creditBalance.balance || 0);
+        var alertClass = creditBalance.isNegative ? 'alert-danger' : 'alert-warning';
+        var iconClass = creditBalance.isNegative ? 'fa-triangle-exclamation' : 'fa-bell';
+        var canManage = user && (user.role === 'superadmin' || user.role === 'admin' || user.role === 'company_admin');
+    %>
+      <div class="alert <%= alertClass %> d-flex align-items-center gap-3 mb-4">
+        <i class="fa-solid <%= iconClass %> fs-4"></i>
+        <div class="flex-grow-1">
+          <strong>
+            <% if (creditBalance.isNegative) { %>
+              Saldo de créditos negativo: <%= balance.toLocaleString() %> créditos
+            <% } else { %>
+              Saldo de créditos bajo: <%= balance.toLocaleString() %> créditos
+            <% } %>
+          </strong>
+          <div class="small">
+            ≈ $<%= (balance/100).toFixed(2) %> USD ·
+            Umbral configurado: <%= Number(creditBalance.lowThreshold).toLocaleString() %> créditos.
+            <% if (creditBalance.isNegative) { %>
+              La empresa está consumiendo créditos en deuda. Recarga para evitar interrupciones futuras.
+            <% } else { %>
+              Considera recargar pronto para no quedarte sin saldo.
+            <% } %>
+          </div>
+        </div>
+        <% if (canManage) { %>
+          <a href="admin/credits/<%= creditBalance.company.id %>" class="btn btn-sm btn-light">
+            <i class="fa-solid fa-coins me-1"></i> Gestionar créditos
+          </a>
+        <% } %>
+      </div>
+    <% } %>
+
     <% if (typeof isAdmin !== 'undefined' && isAdmin && costTotals) {
        function money(v){ var n=Number(v||0); return '$' + n.toFixed(n < 1 ? 4 : 2); }
        function num(v){ return Number(v||0).toLocaleString('es-ES'); }

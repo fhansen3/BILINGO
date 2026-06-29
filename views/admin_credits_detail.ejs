@@ -1,0 +1,230 @@
+<%- include('partials/admin-subnav', { active: 'credits' }) %>
+
+<%
+  var b = balance;
+  var balanceClass = b.isNegative ? 'text-danger' : (b.isLow ? 'text-warning' : 'text-success');
+%>
+
+<nav aria-label="breadcrumb" class="mb-2">
+  <ol class="breadcrumb small mb-0">
+    <% if (isSuper) { %>
+      <li class="breadcrumb-item"><a href="admin/credits">Créditos</a></li>
+    <% } %>
+    <li class="breadcrumb-item active"><%= b.company.name %></li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">
+      <i class="fa-solid fa-coins text-warning me-2"></i>
+      <%= b.company.name %>
+      <code class="ms-1 small text-muted"><%= b.company.code %></code>
+    </h1>
+    <p class="text-muted mb-0">Saldo y movimientos de créditos.</p>
+  </div>
+</div>
+
+<% if (flash) { %>
+  <div class="alert alert-success"><i class="fa-solid fa-check-circle me-1"></i><%= flash %></div>
+<% } %>
+<% if (flashError) { %>
+  <div class="alert alert-danger"><i class="fa-solid fa-circle-exclamation me-1"></i><%= flashError %></div>
+<% } %>
+
+<% if (b.isNegative) { %>
+  <div class="alert alert-danger">
+    <i class="fa-solid fa-triangle-exclamation me-1"></i>
+    <strong>Saldo negativo:</strong> esta empresa está consumiendo más allá de los créditos cargados.
+  </div>
+<% } else if (b.isLow) { %>
+  <div class="alert alert-warning">
+    <i class="fa-solid fa-bell me-1"></i>
+    <strong>Saldo bajo:</strong> el saldo está por debajo del umbral configurado (<%= b.lowThreshold.toLocaleString() %> créditos).
+  </div>
+<% } %>
+
+<!-- Saldo y KPIs -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Saldo actual</div>
+      <div class="display-5 fw-bold <%= balanceClass %>"><%= b.balance.toLocaleString() %></div>
+      <div class="small text-muted">≈ $<%= (b.balance / 100).toFixed(2) %> USD</div>
+    </div></div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Total cargado</div>
+      <div class="h4 mb-0 text-success">+<%= b.totalAdded.toLocaleString() %></div>
+    </div></div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Total consumido</div>
+      <div class="h4 mb-0 text-danger">-<%= b.totalConsumed.toLocaleString() %></div>
+    </div></div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Markup actual</div>
+      <div class="h4 mb-0">×<%= Number(b.company.credit_markup || 1.5).toFixed(3) %></div>
+      <div class="small text-muted">Umbral alerta: <%= b.lowThreshold.toLocaleString() %></div>
+    </div></div>
+  </div>
+</div>
+
+<% if (isSuper) { %>
+<!-- Acciones superadmin -->
+<div class="row g-3 mb-4">
+  <!-- Recargar -->
+  <div class="col-lg-4">
+    <div class="card h-100 border-success">
+      <div class="card-header bg-success-subtle">
+        <strong><i class="fa-solid fa-plus-circle me-1"></i> Recargar créditos</strong>
+      </div>
+      <div class="card-body">
+        <form method="post" action="admin/credits/<%= b.company.id %>/topup">
+          <div class="mb-2">
+            <label class="form-label small">Importe en créditos</label>
+            <input type="number" class="form-control" name="amount" min="1" step="1" placeholder="10000" required>
+            <div class="form-text">10 000 créditos = $100 USD</div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Descripción (opcional)</label>
+            <input type="text" class="form-control form-control-sm" name="description" placeholder="Pago factura abril 2024" maxlength="500">
+          </div>
+          <button type="submit" class="btn btn-success w-100"><i class="fa-solid fa-coins me-1"></i>Recargar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ajuste -->
+  <div class="col-lg-4">
+    <div class="card h-100 border-info">
+      <div class="card-header bg-info-subtle">
+        <strong><i class="fa-solid fa-scale-balanced me-1"></i> Ajuste manual</strong>
+      </div>
+      <div class="card-body">
+        <form method="post" action="admin/credits/<%= b.company.id %>/adjust">
+          <div class="mb-2">
+            <label class="form-label small">Importe (+ o −)</label>
+            <input type="number" class="form-control" name="amount" step="1" placeholder="-500 o 1500" required>
+            <div class="form-text">Positivo = crédito; negativo = débito.</div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Motivo</label>
+            <input type="text" class="form-control form-control-sm" name="description" placeholder="Compensación por incidente" maxlength="500" required>
+          </div>
+          <button type="submit" class="btn btn-info w-100"><i class="fa-solid fa-pen me-1"></i>Aplicar ajuste</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Configuración -->
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header bg-white">
+        <strong><i class="fa-solid fa-sliders me-1"></i> Configuración</strong>
+      </div>
+      <div class="card-body">
+        <form method="post" action="admin/credits/<%= b.company.id %>/settings">
+          <div class="mb-2">
+            <label class="form-label small">Markup (multiplicador sobre costo IA)</label>
+            <input type="number" class="form-control" name="markup" min="1" max="100" step="0.001"
+                   value="<%= Number(b.company.credit_markup || 1.5).toFixed(3) %>" required>
+            <div class="form-text">1.000 = sin markup. 1.500 = +50%.</div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Umbral de alerta (créditos)</label>
+            <input type="number" class="form-control" name="low_threshold" min="0" step="1"
+                   value="<%= b.lowThreshold %>" required>
+          </div>
+          <button type="submit" class="btn btn-outline-primary w-100">Guardar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<!-- Historial -->
+<div class="card">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <strong><i class="fa-solid fa-clock-rotate-left me-1"></i> Movimientos</strong>
+    <form method="get" class="d-flex gap-2 align-items-center">
+      <select name="kind" class="form-select form-select-sm" onchange="this.form.submit()">
+        <option value="">Todos</option>
+        <option value="topup"      <%= kind==='topup' ? 'selected' : '' %>>Recargas</option>
+        <option value="debit"      <%= kind==='debit' ? 'selected' : '' %>>Débitos (llamadas)</option>
+        <option value="adjustment" <%= kind==='adjustment' ? 'selected' : '' %>>Ajustes</option>
+        <option value="refund"     <%= kind==='refund' ? 'selected' : '' %>>Reembolsos</option>
+      </select>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Tipo</th>
+          <th>Descripción</th>
+          <th class="text-end">Importe</th>
+          <th class="text-end">Saldo resultante</th>
+          <th>Origen</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (txs || []).forEach(function(t){
+            var amt = Number(t.amount || 0);
+            var amtClass = amt > 0 ? 'text-success fw-bold' : 'text-danger fw-bold';
+            var amtTxt = (amt > 0 ? '+' : '') + amt.toLocaleString();
+            var badge = {
+              topup:      'bg-success-subtle text-success',
+              debit:      'bg-danger-subtle text-danger',
+              adjustment: 'bg-info-subtle text-info',
+              refund:     'bg-warning-subtle text-warning'
+            }[t.kind] || 'bg-secondary-subtle text-secondary';
+            var label = {
+              topup:'Recarga', debit:'Débito IA', adjustment:'Ajuste', refund:'Reembolso'
+            }[t.kind] || t.kind;
+        %>
+          <tr>
+            <td class="small text-muted"><%= t.created_at ? new Date(t.created_at).toISOString().replace('T',' ').slice(0,16) : '' %></td>
+            <td><span class="badge <%= badge %>"><%= label %></span></td>
+            <td>
+              <%= t.description || '—' %>
+              <% if (t.meeting_id) { %>
+                <a href="admin/meetings/<%= t.meeting_id %>" class="small text-decoration-none ms-1">
+                  <i class="fa-solid fa-video"></i> <%= t.room_code || ('#' + t.meeting_id) %>
+                </a>
+              <% } %>
+              <% if (t.cost_usd) { %>
+                <div class="small text-muted">
+                  Costo IA: $<%= Number(t.cost_usd).toFixed(6) %>
+                  <% if (t.markup) { %> × <%= Number(t.markup).toFixed(3) %><% } %>
+                </div>
+              <% } %>
+            </td>
+            <td class="text-end <%= amtClass %>"><%= amtTxt %></td>
+            <td class="text-end"><%= Number(t.balance_after || 0).toLocaleString() %></td>
+            <td class="small text-muted">
+              <% if (t.created_by_name) { %>
+                <%= t.created_by_name %>
+              <% } else if (t.kind === 'debit') { %>
+                <i class="fa-solid fa-robot me-1"></i>Automático
+              <% } else { %>
+                —
+              <% } %>
+            </td>
+          </tr>
+        <% }); %>
+        <% if (!txs || !txs.length) { %>
+          <tr><td colspan="6" class="text-center text-muted py-4">Sin movimientos todavía.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>

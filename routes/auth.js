@@ -26,6 +26,7 @@ const db = require('../config/db');
 const { hashPassword, verifyPassword } = require('../utils/hash');
 const { redirectIfAuthed } = require('../middleware/requireAuth');
 const activation = require('../services/activation.service');
+const credits = require('../services/credits.service');
 
 const AVATAR_COLORS = ['#58CC02', '#1CB0F6', '#FF9600', '#CE82FF', '#FF4B4B', '#FFC800', '#2B70C9'];
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -133,15 +134,48 @@ router.post('/signup', async (req, res, next) => {
       return renderError('El código de empresa debe tener exactamente 6 letras.');
     }
 
-    // Resolve company by code (must be active).
-    const companyRows = await db.query(
-      'SELECT id, name FROM companies WHERE code = ? AND is_active = 1',
+    // Resolve company by code. If the code matches an existing ACTIVE company,
+    // the user simply joins it (no welcome bonus — credits are per-company).
+    // If it doesn't exist (or exists but is inactive), we auto-create a new
+    // company on the fly with that code and grant the 500-credit welcome bonus.
+    let companyId;
+    let companyJustCreated = false;
+
+    const existingCompany = await db.query(
+      'SELECT id, name, is_active FROM companies WHERE code = ?',
       [companyCode]
     );
-    if (!companyRows.length) {
-      return renderError('Código de empresa inválido. Verifícalo con tu administrador.');
+
+    if (existingCompany.length && existingCompany[0].is_active) {
+      companyId = existingCompany[0].id;
+    } else if (existingCompany.length && !existingCompany[0].is_active) {
+      // Code exists but the company is disabled — don't silently revive it.
+      return renderError('Ese código pertenece a una empresa desactivada. Contacta con soporte o usa otro código.');
+    } else {
+      // Code is free → create a brand-new company for this user.
+      try {
+        const ins = await db.query(
+          'INSERT INTO companies (code, name, is_active) VALUES (?, ?, 1)',
+          [companyCode, 'Empresa ' + companyCode]
+        );
+        companyId = ins.insertId;
+        companyJustCreated = true;
+      } catch (e) {
+        if (e && e.code === 'ER_DUP_ENTRY') {
+          // Race: another signup created the same company a moment ago. Re-read.
+          const again = await db.query(
+            'SELECT id, is_active FROM companies WHERE code = ?',
+            [companyCode]
+          );
+          if (!again.length || !again[0].is_active) {
+            return renderError('No se pudo registrar la empresa. Inténtalo de nuevo.');
+          }
+          companyId = again[0].id;
+        } else {
+          throw e;
+        }
+      }
     }
-    const companyId = companyRows[0].id;
 
     const existing = await db.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length) {
@@ -179,11 +213,27 @@ router.post('/signup', async (req, res, next) => {
     );
     const user = publicUser(rows[0]);
 
+    // If this signup created the company, grant the welcome bonus now.
+    // We do it AFTER the user row exists so createdBy points to a real user.
+    if (companyJustCreated) {
+      try {
+        await credits.grantWelcomeCredits(companyId, user.id);
+        console.log(`[auth] welcome credits granted to new company ${companyId} (code ${companyCode}) by user ${user.id}`);
+      } catch (we) {
+        console.error('[auth] welcome credits failed for company', companyId, we && we.message);
+      }
+    }
+
     req.session.user = user;
 
     // Honor JSON clients (curl, fetch with Accept: application/json)
     if (req.accepts(['html', 'json']) === 'json') {
-      return res.status(201).json({ ok: true, user, redirect: 'dashboard' });
+      return res.status(201).json({
+        ok: true,
+        user,
+        company: { id: companyId, code: companyCode, justCreated: companyJustCreated },
+        redirect: 'dashboard'
+      });
     }
     return res.redirect('dashboard');
   } catch (err) { next(err); }

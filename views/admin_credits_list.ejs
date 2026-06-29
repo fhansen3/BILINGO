@@ -1,0 +1,125 @@
+<%- include('partials/admin-subnav', { active: 'credits' }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1"><i class="fa-solid fa-coins text-warning me-2"></i>Créditos por empresa</h1>
+    <p class="text-muted mb-0">
+      1 crédito = $0.01 USD · El consumo se debita automáticamente al finalizar cada llamada.
+    </p>
+  </div>
+</div>
+
+<% if (flash) { %>
+  <div class="alert alert-success"><i class="fa-solid fa-check-circle me-1"></i><%= flash %></div>
+<% } %>
+<% if (flashError) { %>
+  <div class="alert alert-danger"><i class="fa-solid fa-circle-exclamation me-1"></i><%= flashError %></div>
+<% } %>
+
+<!-- KPIs agregados -->
+<%
+  var totBalance = 0, totAdded = 0, totConsumed = 0, lowCount = 0, negCount = 0;
+  (list || []).forEach(function(r){
+    totBalance += Number(r.balance || 0);
+    totAdded   += Number(r.total_added || 0);
+    totConsumed+= Number(r.total_consumed || 0);
+    if (Number(r.balance) < Number(r.credit_low_threshold || 0)) lowCount++;
+    if (Number(r.balance) < 0) negCount++;
+  });
+%>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Saldo total</div>
+      <div class="display-6 fw-bold"><%= totBalance.toLocaleString() %></div>
+      <div class="small text-muted">~ $<%= (totBalance/100).toFixed(2) %> USD</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Total cargado</div>
+      <div class="display-6 fw-bold text-success">+<%= totAdded.toLocaleString() %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Total consumido</div>
+      <div class="display-6 fw-bold text-danger">-<%= totConsumed.toLocaleString() %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="text-muted small">Empresas en alerta</div>
+      <div class="display-6 fw-bold <%= lowCount ? 'text-warning' : '' %>"><%= lowCount %></div>
+      <div class="small text-muted"><%= negCount %> con saldo negativo</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header bg-white d-flex justify-content-between align-items-center">
+    <strong>Empresas (<%= (list || []).length %>)</strong>
+    <span class="small text-muted">Click en una fila para ver detalle, historial y recargar.</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Empresa</th>
+          <th class="text-center">Estado</th>
+          <th class="text-end">Saldo</th>
+          <th class="text-end">≈ USD</th>
+          <th class="text-end">Cargado</th>
+          <th class="text-end">Consumido</th>
+          <th class="text-center">Markup</th>
+          <th class="text-end">Usuarios</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (list || []).forEach(function(r){
+            var balance = Number(r.balance || 0);
+            var low = balance < Number(r.credit_low_threshold || 0);
+            var neg = balance < 0;
+            var balClass = neg ? 'text-danger fw-bold' : (low ? 'text-warning fw-bold' : 'fw-bold');
+        %>
+          <tr>
+            <td>
+              <a href="admin/credits/<%= r.company_id %>" class="text-decoration-none">
+                <code class="me-1"><%= r.code %></code><strong><%= r.name %></strong>
+              </a>
+            </td>
+            <td class="text-center">
+              <% if (r.is_active) { %>
+                <span class="badge bg-success-subtle text-success">Activa</span>
+              <% } else { %>
+                <span class="badge bg-secondary-subtle text-secondary">Inactiva</span>
+              <% } %>
+            </td>
+            <td class="text-end <%= balClass %>">
+              <%= balance.toLocaleString() %>
+              <% if (neg) { %>
+                <i class="fa-solid fa-triangle-exclamation text-danger ms-1" title="Saldo negativo"></i>
+              <% } else if (low) { %>
+                <i class="fa-solid fa-bell text-warning ms-1" title="Saldo bajo"></i>
+              <% } %>
+            </td>
+            <td class="text-end text-muted small">$<%= (balance/100).toFixed(2) %></td>
+            <td class="text-end small text-success">+<%= Number(r.total_added || 0).toLocaleString() %></td>
+            <td class="text-end small text-danger">-<%= Number(r.total_consumed || 0).toLocaleString() %></td>
+            <td class="text-center"><span class="badge bg-light text-dark">×<%= Number(r.credit_markup || 1.5).toFixed(2) %></span></td>
+            <td class="text-end small text-muted"><%= r.user_count %></td>
+            <td class="text-end">
+              <a href="admin/credits/<%= r.company_id %>" class="btn btn-sm btn-outline-primary">
+                <i class="fa-solid fa-arrow-right"></i> Ver
+              </a>
+            </td>
+          </tr>
+        <% }); %>
+        <% if (!list || !list.length) { %>
+          <tr><td colspan="9" class="text-center text-muted py-4">No hay empresas registradas.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>

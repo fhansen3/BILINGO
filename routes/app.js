@@ -19,6 +19,7 @@ const db = require('../config/db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { hashPassword, verifyPassword } = require('../utils/hash');
 const costsService = require('../services/costs.service');
+const creditsService = require('../services/credits.service');
 
 const AVATAR_COLORS = ['#58CC02', '#1CB0F6', '#FF9600', '#CE82FF', '#FF4B4B', '#FFC800', '#2B70C9', '#4F46E5'];
 const DELIVERY_MODES = ['voice', 'text', 'both'];
@@ -111,6 +112,7 @@ router.get('/dashboard', requireAuth, async (req, res, next) => {
     // - company_admin    → scoped to their company
     let costTotals = null;
     let audioMinutes = null;
+    let creditBalance = null;
     const role = full && full.role;
     const isAdmin = role === 'superadmin' || role === 'admin' || role === 'company_admin';
     if (isAdmin) {
@@ -127,6 +129,15 @@ router.get('/dashboard', requireAuth, async (req, res, next) => {
       }
     }
 
+    // Credit balance for any user whose company has credits (shown if low/negative).
+    if (full && full.company_id) {
+      try {
+        creditBalance = await creditsService.getBalance(full.company_id);
+      } catch (e) {
+        console.error('[dashboard] failed to load credit balance', e && e.message);
+      }
+    }
+
     res.render('dashboard', {
       title: 'Panel · BiLingo Meet',
       description: 'Tu panel de BiLingo Meet: crea reuniones, programa o únete con un código.',
@@ -137,7 +148,8 @@ router.get('/dashboard', requireAuth, async (req, res, next) => {
       recent,
       isAdmin,
       costTotals,
-      audioMinutes
+      audioMinutes,
+      creditBalance
     });
   } catch (err) { next(err); }
 });

@@ -117,6 +117,14 @@ app.use(errorHandler);
 setIO(io);
 attachSockets(io);
 
+// Sweeper: closes zombie meetings + backfills missing usage every 5 min.
+try {
+  const sweeper = require('./services/meetingSweeper');
+  sweeper.start();
+} catch (e) {
+  console.error('[boot] meetingSweeper failed to start (non-fatal):', e && e.message || e);
+}
+
 server.listen(env.port, () => {
   console.log(`[boot] BiLingo Meet listening on port ${env.port}`);
 });

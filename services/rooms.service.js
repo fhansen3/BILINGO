@@ -106,6 +106,31 @@ async function endRoom(roomId, userId) {
       [room.id, room.guest_id, room.host_id, duration]
     );
   }
+
+  // Step 1: settle Realtime Translate billing — write a single row to
+  // meeting_token_usage with the OpenAI flat per-minute cost. Best-effort.
+  try {
+    const { recordRealtimeUsage } = require('./realtimeUsage');
+    const rt = await recordRealtimeUsage(room.id);
+    if (rt && !rt.skipped) {
+      console.log('[realtime] meeting', room.id, 'recorded', rt.minutes, 'min · $' + rt.costUsd);
+    }
+  } catch (e) {
+    console.warn('[realtime] usage record failed for room', room.id, e.message);
+  }
+
+  // Step 2: debit IA cost from the host's company credit balance.
+  // Best-effort: never let a credit-debit failure break the end-room flow.
+  try {
+    const credits = require('./credits.service');
+    const result = await credits.debitForMeeting(room.id);
+    if (result && !result.skipped) {
+      console.log('[credits] meeting', room.id, 'debited', result.credits, 'credits (balance:', result.balance, ')');
+    }
+  } catch (e) {
+    console.warn('[credits] debit failed for room', room.id, e.message);
+  }
+
   return { ended: true, duration };
 }
 

@@ -1141,7 +1141,7 @@ router.post('/m/:code/leave', requireAuth, async (req, res, next) => {
       );
     }
 
-    // If the host leaves, end the meeting.
+    // If the host leaves, end the meeting + settle realtime billing + debit credits.
     if (userId === meeting.host_id && meeting.status === 'active') {
       const startedAt = meeting.started_at ? new Date(meeting.started_at) : null;
       const duration  = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000)) : 0;
@@ -1149,6 +1149,14 @@ router.post('/m/:code/leave', requireAuth, async (req, res, next) => {
         `UPDATE rooms SET status='ended', ended_at=NOW(), duration_seconds=? WHERE id = ?`,
         [duration, meeting.id]
       );
+      try {
+        const { recordRealtimeUsage } = require('../services/realtimeUsage');
+        await recordRealtimeUsage(meeting.id);
+      } catch (e) { console.warn('[realtime] usage record failed:', e.message); }
+      try {
+        const credits = require('../services/credits.service');
+        await credits.debitForMeeting(meeting.id);
+      } catch (e) { console.warn('[credits] debit failed:', e.message); }
     }
 
     if (req.session) {
@@ -2024,6 +2032,23 @@ router.post('/m/:code/host/end', requireAuth, requireHost, async (req, res, next
       by: req.user.id,
       at: Date.now()
     });
+
+    // Settle Realtime Translate billing, then debit credits. Best-effort —
+    // never block the host-end redirect on a credit failure.
+    try {
+      const { recordRealtimeUsage } = require('../services/realtimeUsage');
+      const rt = await recordRealtimeUsage(meeting.id);
+      if (rt && !rt.skipped) {
+        console.log('[realtime] host-end meeting', meeting.id, rt.minutes, 'min · $' + rt.costUsd);
+      }
+    } catch (e) { console.warn('[realtime] usage record failed:', e.message); }
+    try {
+      const credits = require('../services/credits.service');
+      const r = await credits.debitForMeeting(meeting.id);
+      if (r && !r.skipped) {
+        console.log('[credits] host-end meeting', meeting.id, 'debited', r.credits, 'credits');
+      }
+    } catch (e) { console.warn('[credits] debit failed:', e.message); }
 
     if (req.session) {
       req.session.activeParticipantId = null;

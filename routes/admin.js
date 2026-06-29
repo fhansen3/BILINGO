@@ -28,6 +28,7 @@ const {
 } = require('../middleware/requireAuth');
 const activation = require('../services/activation.service');
 const costs = require('../services/costs.service');
+const credits = require('../services/credits.service');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -583,8 +584,24 @@ router.post('/admin/companies', requireAuth, loadAdminContext, requireSuperAdmin
     if (!name) return res.redirect(adminPath('admin/companies?err=' + encodeURIComponent('El nombre es obligatorio.')));
     if (!/^[A-Z]{6}$/.test(code)) return res.redirect(adminPath('admin/companies?err=' + encodeURIComponent('El código debe tener exactamente 6 letras (A-Z).')));
     try {
-      await db.query('INSERT INTO companies (code, name, is_active) VALUES (?, ?, 1)', [code, name]);
-      return res.redirect(adminPath('admin/companies?ok=' + encodeURIComponent('Empresa "' + name + '" creada con código ' + code + '.')));
+      const result = await db.query('INSERT INTO companies (code, name, is_active) VALUES (?, ?, 1)', [code, name]);
+      const newCompanyId = result.insertId;
+
+      // Grant welcome bonus (500 créditos gratuitos).
+      let welcomeMsg = '';
+      try {
+        const grant = await credits.grantWelcomeCredits(newCompanyId, req.user.id);
+        if (!grant.skipped) {
+          welcomeMsg = ' Se acreditaron ' + grant.credits + ' créditos de bienvenida 🎁';
+          await logAudit(req.user.id, 'credit.welcome', 'company', newCompanyId, { amount: grant.credits });
+        }
+      } catch (we) {
+        console.error('[admin] welcome credits failed for company', newCompanyId, we && we.message);
+      }
+
+      return res.redirect(adminPath('admin/companies?ok=' + encodeURIComponent(
+        'Empresa "' + name + '" creada con código ' + code + '.' + welcomeMsg
+      )));
     } catch (e) {
       if (e && e.code === 'ER_DUP_ENTRY') {
         return res.redirect(adminPath('admin/companies?err=' + encodeURIComponent('Ese código ya está en uso. Elige otro.')));
@@ -743,6 +760,183 @@ router.get('/admin/costs', requireAuth, loadAdminContext, async (req, res, next)
       topUsers,
       recent,
       dailyChart
+    });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/credits  (saldo y movimientos por empresa)
+// ---------------------------------------------------------------------------
+router.get('/admin/credits', requireAuth, loadAdminContext, async (req, res, next) => {
+  try {
+    if (isSuper(req)) {
+      // Superadmin: ve TODAS las empresas con su saldo.
+      const list = await credits.listCompanyBalances();
+      return res.render('admin_credits_list', {
+        title: 'Créditos · Admin · BiLingo Meet',
+        description: 'Saldo de créditos por empresa.',
+        nav: 'app',
+        active: 'admin',
+        user: req.user,
+        isSuper: true,
+        list,
+        flash: req.query.ok ? decodeURIComponent(req.query.ok) : null,
+        flashError: req.query.err ? decodeURIComponent(req.query.err) : null
+      });
+    }
+    // company_admin → redirige a su propia empresa
+    if (req.user.company_id) {
+      return res.redirect(adminPath('admin/credits/' + req.user.company_id, req));
+    }
+    return res.redirect(adminPath('admin/users?err=' + encodeURIComponent('Sin empresa asignada.'), req));
+  } catch (err) { next(err); }
+});
+
+// GET /admin/credits/:companyId  (detalle de una empresa)
+router.get('/admin/credits/:companyId', requireAuth, loadAdminContext, async (req, res, next) => {
+  try {
+    const companyId = parseInt(req.params.companyId, 10);
+    if (!companyId) return res.redirect(adminPath('admin/credits?err=' + encodeURIComponent('ID inválido.'), req));
+    if (!isSuper(req) && req.user.company_id !== companyId) {
+      return res.status(403).render('404', {
+        title: 'Sin permiso', description: '', nav: 'app', user: req.user
+      });
+    }
+    const balance = await credits.getBalance(companyId);
+    if (!balance) return res.redirect(adminPath('admin/credits?err=' + encodeURIComponent('Empresa no encontrada.'), req));
+    const kind = (req.query.kind || '').trim();
+    const txs = await credits.getTransactions(companyId, { limit: 200, kind: kind || null });
+
+    res.render('admin_credits_detail', {
+      title: 'Créditos · ' + balance.company.name + ' · Admin',
+      description: '',
+      nav: 'app',
+      active: 'admin',
+      user: req.user,
+      isSuper: isSuper(req),
+      balance,
+      txs,
+      kind,
+      flash: req.query.ok ? decodeURIComponent(req.query.ok) : null,
+      flashError: req.query.err ? decodeURIComponent(req.query.err) : null
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /admin/credits/:companyId/topup
+router.post('/admin/credits/:companyId/topup', requireAuth, loadAdminContext, requireSuperAdmin, async (req, res, next) => {
+  try {
+    const companyId = parseInt(req.params.companyId, 10);
+    const amount = Math.floor(Number(req.body.amount || 0));
+    const description = String(req.body.description || '').trim() || 'Recarga manual';
+    if (!companyId) return res.redirect(adminPath('admin/credits?err=' + encodeURIComponent('ID inválido.'), req));
+    if (!amount || amount <= 0) {
+      return res.redirect(adminPath('admin/credits/' + companyId + '?err=' + encodeURIComponent('Importe inválido (debe ser > 0).'), req));
+    }
+    await credits.addCredits(companyId, amount, { description, createdBy: req.user.id });
+    await logAudit(req.user.id, 'credit.topup', 'company', companyId, { amount, description });
+    return res.redirect(adminPath('admin/credits/' + companyId + '?ok=' + encodeURIComponent('Recargados ' + amount + ' créditos.'), req));
+  } catch (err) { next(err); }
+});
+
+// POST /admin/credits/:companyId/adjust  (ajuste positivo o negativo)
+router.post('/admin/credits/:companyId/adjust', requireAuth, loadAdminContext, requireSuperAdmin, async (req, res, next) => {
+  try {
+    const companyId = parseInt(req.params.companyId, 10);
+    const amount = Math.floor(Number(req.body.amount || 0));
+    const description = String(req.body.description || '').trim() || 'Ajuste manual';
+    if (!companyId) return res.redirect(adminPath('admin/credits?err=' + encodeURIComponent('ID inválido.'), req));
+    if (!amount) {
+      return res.redirect(adminPath('admin/credits/' + companyId + '?err=' + encodeURIComponent('Importe inválido (no puede ser 0).'), req));
+    }
+    await credits.applyAdjustment(companyId, amount, { description, createdBy: req.user.id });
+    await logAudit(req.user.id, 'credit.adjustment', 'company', companyId, { amount, description });
+    return res.redirect(adminPath('admin/credits/' + companyId + '?ok=' + encodeURIComponent('Ajuste de ' + amount + ' créditos aplicado.'), req));
+  } catch (err) { next(err); }
+});
+
+// POST /admin/credits/:companyId/settings  (markup y umbral)
+router.post('/admin/credits/:companyId/settings', requireAuth, loadAdminContext, requireSuperAdmin, async (req, res, next) => {
+  try {
+    const companyId = parseInt(req.params.companyId, 10);
+    let markup = Number(req.body.markup);
+    let threshold = parseInt(req.body.low_threshold, 10);
+    if (!companyId) return res.redirect(adminPath('admin/credits?err=' + encodeURIComponent('ID inválido.'), req));
+    if (!isFinite(markup) || markup < 1 || markup > 100) {
+      return res.redirect(adminPath('admin/credits/' + companyId + '?err=' + encodeURIComponent('Markup inválido (debe estar entre 1.0 y 100).'), req));
+    }
+    if (!isFinite(threshold) || threshold < 0) threshold = 0;
+    await db.query(
+      'UPDATE companies SET credit_markup = ?, credit_low_threshold = ? WHERE id = ?',
+      [markup, threshold, companyId]
+    );
+    await logAudit(req.user.id, 'credit.settings', 'company', companyId, { markup, threshold });
+    return res.redirect(adminPath('admin/credits/' + companyId + '?ok=' + encodeURIComponent('Configuración actualizada.'), req));
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/meetings  (listado con KPIs por llamada)
+// ---------------------------------------------------------------------------
+router.get('/admin/meetings', requireAuth, loadAdminContext, async (req, res, next) => {
+  try {
+    const companyId = scopeCompanyId(req); // null para superadmin
+    const search = (req.query.search || '').trim();
+    const dateFrom = (req.query.from || '').trim();
+    const dateTo = (req.query.to || '').trim();
+    const status = (req.query.status || '').trim();
+    const meetings = await credits.listMeetingsWithKpis({
+      companyId, search, dateFrom, dateTo, status, limit: 200
+    });
+
+    // KPIs agregados
+    const totals = {
+      meetings: meetings.length,
+      cost_usd: meetings.reduce((s, m) => s + Number(m.cost_usd || 0), 0),
+      credits: meetings.reduce((s, m) => s + Number(m.credits_debited || 0), 0),
+      avg_latency: meetings.length
+        ? meetings.reduce((s, m) => s + Number(m.avg_latency_ms || 0), 0) / meetings.filter(m => Number(m.avg_latency_ms) > 0).length || 0
+        : 0,
+      degraded: meetings.reduce((s, m) => s + Number(m.degraded_count || 0), 0)
+    };
+
+    res.render('admin_meetings_list', {
+      title: 'Llamadas · Admin · BiLingo Meet',
+      description: '',
+      nav: 'app',
+      active: 'admin',
+      user: req.user,
+      isSuper: isSuper(req),
+      meetings,
+      totals,
+      filters: { search, from: dateFrom, to: dateTo, status }
+    });
+  } catch (err) { next(err); }
+});
+
+// GET /admin/meetings/:id
+router.get('/admin/meetings/:id', requireAuth, loadAdminContext, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.redirect(adminPath('admin/meetings', req));
+    const data = await credits.getMeetingMetrics(id);
+    if (!data) return res.status(404).render('404', {
+      title: 'Llamada no encontrada', description: '', nav: 'app', user: req.user
+    });
+    // Scoping: company_admin solo puede ver llamadas de su empresa
+    if (!isSuper(req) && data.meeting.company_id !== req.user.company_id) {
+      return res.status(403).render('404', {
+        title: 'Sin permiso', description: '', nav: 'app', user: req.user
+      });
+    }
+    res.render('admin_meeting_detail', {
+      title: 'Llamada ' + (data.meeting.room_code || ('#' + id)) + ' · Admin',
+      description: '',
+      nav: 'app',
+      active: 'admin',
+      user: req.user,
+      isSuper: isSuper(req),
+      data
     });
   } catch (err) { next(err); }
 });
