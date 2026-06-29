@@ -28,7 +28,88 @@
         <h1 class="h4 fw-bold mb-1">¡Hola, <%= user.display_name %>! 👋</h1>
         <p class="text-muted small mb-0">¿Listo para tu próxima reunión sin barreras?</p>
       </div>
+      <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+        <div class="d-none d-md-flex gap-2">
+          <a href="admin" class="btn btn-outline-primary btn-sm">
+            <i class="fa-solid fa-shield-halved me-1"></i> Administración
+          </a>
+          <a href="admin/costs" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-chart-line me-1"></i> Consumos y costos
+          </a>
+        </div>
+      <% } %>
     </div>
+
+    <% if (typeof isAdmin !== 'undefined' && isAdmin && costTotals) {
+       function money(v){ var n=Number(v||0); return '$' + n.toFixed(n < 1 ? 4 : 2); }
+       function num(v){ return Number(v||0).toLocaleString('es-ES'); }
+       var mins = Number(audioMinutes||0);
+       var minsLabel = mins < 1 ? (mins*60).toFixed(0) + ' s' : mins.toFixed(1) + ' min';
+       var scopeLabel = (user.role === 'company_admin') ? 'tu empresa' : 'plataforma';
+    %>
+      <div class="row g-3 mb-4">
+        <div class="col-12">
+          <div class="text-muted small mb-2">
+            <i class="fa-solid fa-circle-info me-1"></i>
+            Indicadores de <strong><%= scopeLabel %></strong>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card bm-shadow-sm h-100 p-3 border-0" style="background:var(--bm-surface)">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="text-muted small">Costo hoy</span>
+              <span class="rounded-3 d-inline-flex align-items-center justify-content-center"
+                    style="width:32px;height:32px;background:#ECFDF5;color:#10B981">
+                <i class="fa-solid fa-dollar-sign"></i>
+              </span>
+            </div>
+            <div class="h5 fw-bold mb-0"><%= money(costTotals.cost_today) %></div>
+            <div class="text-muted small mt-1">USD en las últimas 24h</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card bm-shadow-sm h-100 p-3 border-0" style="background:var(--bm-surface)">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="text-muted small">Costo 7 días</span>
+              <span class="rounded-3 d-inline-flex align-items-center justify-content-center"
+                    style="width:32px;height:32px;background:#EFF6FF;color:#2563EB">
+                <i class="fa-solid fa-calendar-week"></i>
+              </span>
+            </div>
+            <div class="h5 fw-bold mb-0"><%= money(costTotals.cost_7d) %></div>
+            <div class="text-muted small mt-1">USD · 30d: <%= money(costTotals.cost_30d) %></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card bm-shadow-sm h-100 p-3 border-0" style="background:var(--bm-surface)">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="text-muted small">Tokens totales</span>
+              <span class="rounded-3 d-inline-flex align-items-center justify-content-center"
+                    style="width:32px;height:32px;background:#FFF7ED;color:#F59E0B">
+                <i class="fa-solid fa-coins"></i>
+              </span>
+            </div>
+            <div class="h5 fw-bold mb-0"><%= num(costTotals.tokens_total) %></div>
+            <div class="text-muted small mt-1"><%= num(costTotals.calls_total) %> llamadas</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card bm-shadow-sm h-100 p-3 border-0" style="background:var(--bm-surface)">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="text-muted small">Audio procesado</span>
+              <span class="rounded-3 d-inline-flex align-items-center justify-content-center"
+                    style="width:32px;height:32px;background:#F5F3FF;color:#7C3AED">
+                <i class="fa-solid fa-waveform-lines"></i>
+              </span>
+            </div>
+            <div class="h5 fw-bold mb-0"><%= minsLabel %></div>
+            <div class="text-muted small mt-1">
+              <a href="admin/costs" class="text-decoration-none">Ver detalle →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% } %>
 
     <!-- Quick action cards -->
     <div class="row g-3 mb-4">

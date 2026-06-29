@@ -9,6 +9,7 @@
         '<nav class="navbar-bl" style="background: rgba(255,255,255,0.97); backdrop-filter: blur(10px); position: sticky; top:0; z-index:50">' +
           '<a href="#/landing" class="brand" style="text-decoration:none"><span class="parrot">🦜</span> BiLingo Meet</a>' +
           '<div class="nav-links">' +
+            '<a href="#security" class="nav-link"><i class="fa-solid fa-shield-halved"></i> Seguridad</a>' +
             (isAuth
               ? '<a href="#/dashboard" class="btn-bl btn-green btn-sm"><i class="fa-solid fa-gauge"></i> Ir al Dashboard</a>'
               : '<a href="#/login" class="nav-link"><i class="fa-solid fa-right-to-bracket"></i> Iniciar sesión</a>' +
@@ -108,8 +109,8 @@
             '</div>' +
             '<div class="feature-card">' +
               '<div class="feature-icon purple"><i class="fa-solid fa-shield-halved"></i></div>' +
-              '<h3>Privado y seguro</h3>' +
-              '<p>Tus reuniones son tuyas. Audio y vídeo se transmiten cifrados de punto a punto entre los participantes.</p>' +
+              '<h3>Privado por diseño</h3>' +
+              '<p>Audio y vídeo viajan <strong>directos entre navegadores</strong> con cifrado DTLS-SRTP obligatorio. Nuestros servidores nunca escuchan tu reunión. <a href="#security">Ver detalles &rarr;</a></p>' +
             '</div>' +
             '<div class="feature-card">' +
               '<div class="feature-icon yellow"><i class="fa-solid fa-clock-rotate-left"></i></div>' +
@@ -151,6 +152,51 @@
               '<h3><i class="fa-solid fa-comments"></i> Trabajen juntos</h3>' +
               '<p>Video, voz y chat traducido en tiempo real. El idioma deja de ser una barrera.</p>' +
             '</div>' +
+          '</div>' +
+        '</section>' +
+
+        // ──────────────── SECURITY & PRIVACY ────────────────
+        '<section id="security" class="security-section">' +
+          '<div class="section-head">' +
+            '<div class="section-eyebrow" style="color:var(--green)"><i class="fa-solid fa-shield-halved"></i> Seguridad y privacidad</div>' +
+            '<h2>Tu conversación es <span style="color:var(--green)">tuya</span>.</h2>' +
+            '<p>BiLingo Meet está diseñado bajo el principio de mínima exposición: ningún servidor escucha tu reunión, el audio viaja cifrado de extremo a extremo, y la base de usuarios está aislada por empresa.</p>' +
+          '</div>' +
+          '<div class="security-grid">' +
+            '<div class="security-card">' +
+              '<div class="security-icon"><i class="fa-solid fa-network-wired"></i></div>' +
+              '<h3>100% peer-to-peer</h3>' +
+              '<p>Audio y vídeo se transmiten <strong>directamente entre los navegadores</strong> de los participantes mediante WebRTC. No hay servidor central que reciba, mezcle o grabe tu media.</p>' +
+            '</div>' +
+            '<div class="security-card">' +
+              '<div class="security-icon"><i class="fa-solid fa-lock"></i></div>' +
+              '<h3>Cifrado obligatorio</h3>' +
+              '<p>Toda la transmisión está cifrada con <strong>DTLS-SRTP</strong>, el mismo estándar que usan Google Meet, Zoom y Microsoft Teams. WebRTC obliga a cifrar antes de salir de tu navegador — no es opcional.</p>' +
+            '</div>' +
+            '<div class="security-card">' +
+              '<div class="security-icon"><i class="fa-solid fa-microphone-slash"></i></div>' +
+              '<h3>No grabamos tu voz</h3>' +
+              '<p>Nuestros servidores nunca reciben tu audio. La traducción ocurre en vivo, por sesión, en el procesador de IA al que tu propio navegador envía el audio. Nada queda almacenado en BiLingo Meet.</p>' +
+            '</div>' +
+            '<div class="security-card">' +
+              '<div class="security-icon"><i class="fa-solid fa-handshake"></i></div>' +
+              '<h3>Solo señalización</h3>' +
+              '<p>Nuestro servidor solo presenta a los participantes entre sí (intercambio de SDP / ICE) y luego se aparta. Una vez establecida la conexión, todo el media fluye <strong>sin pasar por nosotros</strong>.</p>' +
+            '</div>' +
+            '<div class="security-card">' +
+              '<div class="security-icon"><i class="fa-solid fa-building-shield"></i></div>' +
+              '<h3>Aislamiento por empresa</h3>' +
+              '<p>Cada cuenta pertenece a una empresa identificada por un <strong>código único</strong>. Solo puedes buscar y contactar a miembros de tu propia organización. La base de usuarios es privada por empresa.</p>' +
+            '</div>' +
+            '<div class="security-card">' +
+              '<div class="security-icon"><i class="fa-solid fa-key"></i></div>' +
+              '<h3>Credenciales robustas</h3>' +
+              '<p>Contraseñas con <strong>bcrypt</strong> (jamás en texto plano), sesiones en cookies firmadas <code>HttpOnly</code> + <code>SameSite=Lax</code>, y enlaces de recuperación de un solo uso que caducan en 1 hora.</p>' +
+            '</div>' +
+          '</div>' +
+          '<div class="security-footnote">' +
+            '<i class="fa-solid fa-circle-info"></i> ' +
+            'Sin tracking de terceros · Sin venta de datos · Datos almacenados solo lo estrictamente necesario para el servicio.' +
           '</div>' +
         '</section>' +
 

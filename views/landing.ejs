@@ -7,25 +7,26 @@
     <span class="text-primary">Entiéndete con cualquiera.</span>
   </h1>
   <p class="lead text-muted mb-4 mx-auto" style="max-width: 640px;">
-    Videollamadas grupales con traducción en tiempo real. Cada participante habla y escribe en su lengua materna; el resto lo escucha y lo lee en la suya. Gratis, sin instalar nada.
+    Videollamadas grupales con traducción de voz en tiempo real. Cada participante habla en su lengua materna; el resto lo escucha en la suya. Sin instalar nada.
   </p>
   <div class="d-flex justify-content-center gap-2 flex-wrap">
-    <a class="btn btn-primary btn-lg" href="#/room/new">
-      <i class="fa-solid fa-video me-1"></i> Iniciar una reunión
+    <a class="btn btn-primary btn-lg" href="signup">
+      <i class="fa-solid fa-user-plus me-1"></i> Crear cuenta
     </a>
-    <a class="btn btn-outline-primary btn-lg" href="#/register">
-      <i class="fa-solid fa-user-plus me-1"></i> Crear cuenta gratis
+    <a class="btn btn-outline-primary btn-lg" href="login">
+      <i class="fa-solid fa-right-to-bracket me-1"></i> Iniciar sesión
     </a>
   </div>
   <div class="mt-3">
     <small class="text-muted">
-      <i class="fa-solid fa-circle-check text-success me-1"></i> 100% gratis ·
-      <i class="fa-solid fa-circle-check text-success me-1"></i> 30+ idiomas ·
-      <i class="fa-solid fa-circle-check text-success me-1"></i> Sin descargas
+      <i class="fa-solid fa-lock text-success me-1"></i> Audio cifrado punto a punto ·
+      <i class="fa-solid fa-server text-success me-1"></i> Sin servidor central ·
+      <i class="fa-solid fa-language text-success me-1"></i> 30+ idiomas
     </small>
   </div>
 </section>
 
+<!-- Join-by-code form -->
 <section class="py-4">
   <div class="row justify-content-center">
     <div class="col-md-8 col-lg-6">
@@ -56,13 +57,119 @@
           </button>
         </form>
         <p class="text-muted small text-center mt-3 mb-0">
-          ¿No tienes un código? <a href="#/register">Crea una cuenta</a> para iniciar tu propia reunión.
+          También puedes entrar como invitado solo con tu nombre y tu idioma.
         </p>
       </div>
     </div>
   </div>
 </section>
 
+<!-- ─────────── SECURITY & PRIVACY (NEW) ─────────── -->
+<section id="security" class="py-5">
+  <div class="text-center mb-5">
+    <span class="badge bg-success-subtle text-success mb-3 px-3 py-2">
+      <i class="fa-solid fa-shield-halved me-1"></i> Seguridad y privacidad
+    </span>
+    <h2 class="fw-bold mb-2">Tu conversación es <span class="text-success">tuya</span>.</h2>
+    <p class="text-muted mx-auto" style="max-width:680px;">
+      BiLingo Meet está diseñado bajo el principio de mínima exposición: ningún servidor escucha tu reunión, el audio viaja cifrado de extremo a extremo, y solo el código de empresa que te entregó tu administrador permite ver y contactar a los demás miembros.
+    </p>
+  </div>
+
+  <div class="row g-4">
+    <!-- Card 1: P2P WebRTC -->
+    <div class="col-md-6 col-lg-4">
+      <article class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-success mb-3" style="font-size:1.75rem">
+          <i class="fa-solid fa-network-wired"></i>
+        </div>
+        <h3 class="h5 fw-bold">100% peer-to-peer</h3>
+        <p class="text-muted mb-0 small">
+          Audio y video se transmiten <strong>directamente entre navegadores</strong> mediante WebRTC. No hay servidor central que reciba, mezcle o grabe tu media — tu reunión es una conexión directa entre los participantes.
+        </p>
+      </article>
+    </div>
+
+    <!-- Card 2: Encryption -->
+    <div class="col-md-6 col-lg-4">
+      <article class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-success mb-3" style="font-size:1.75rem">
+          <i class="fa-solid fa-lock"></i>
+        </div>
+        <h3 class="h5 fw-bold">Cifrado obligatorio</h3>
+        <p class="text-muted mb-0 small">
+          Toda la transmisión está cifrada con <strong>DTLS-SRTP</strong> (el mismo estándar que usan Google Meet, Zoom y Microsoft Teams). El cifrado no es opcional — WebRTC <em>obliga</em> a que los streams sean cifrados antes de salir de tu navegador.
+        </p>
+      </article>
+    </div>
+
+    <!-- Card 3: No server-side recording -->
+    <div class="col-md-6 col-lg-4">
+      <article class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-success mb-3" style="font-size:1.75rem">
+          <i class="fa-solid fa-microphone-slash"></i>
+        </div>
+        <h3 class="h5 fw-bold">No grabamos tu voz</h3>
+        <p class="text-muted mb-0 small">
+          Nuestros servidores nunca reciben tu audio. La traducción ocurre en directo, por sesión, en el procesador de IA al que tu propio navegador envía el audio cifrado. Nada queda almacenado en BiLingo Meet.
+        </p>
+      </article>
+    </div>
+
+    <!-- Card 4: STUN/TURN servers -->
+    <div class="col-md-6 col-lg-4">
+      <article class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-success mb-3" style="font-size:1.75rem">
+          <i class="fa-solid fa-handshake"></i>
+        </div>
+        <h3 class="h5 fw-bold">Solo señalización</h3>
+        <p class="text-muted mb-0 small">
+          Nuestro servidor solo presenta a los participantes entre sí (intercambio de SDP / ICE) y luego se aparta. Una vez establecida la conexión, todo el media fluye <strong>sin pasar por nosotros</strong>.
+        </p>
+      </article>
+    </div>
+
+    <!-- Card 5: Company-level isolation -->
+    <div class="col-md-6 col-lg-4">
+      <article class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-success mb-3" style="font-size:1.75rem">
+          <i class="fa-solid fa-building-shield"></i>
+        </div>
+        <h3 class="h5 fw-bold">Aislamiento por empresa</h3>
+        <p class="text-muted mb-0 small">
+          Cada cuenta pertenece a una empresa identificada por un <strong>código de 6 letras</strong>. Solo puedes buscar y contactar a miembros de tu propia empresa. La base de usuarios es privada por organización.
+        </p>
+      </article>
+    </div>
+
+    <!-- Card 6: Auth + passwords -->
+    <div class="col-md-6 col-lg-4">
+      <article class="card h-100 p-4 bm-shadow-sm">
+        <div class="text-success mb-3" style="font-size:1.75rem">
+          <i class="fa-solid fa-key"></i>
+        </div>
+        <h3 class="h5 fw-bold">Contraseñas robustas</h3>
+        <p class="text-muted mb-0 small">
+          Las contraseñas se almacenan con <strong>bcrypt</strong> (nunca en texto plano), las sesiones viajan en cookies firmadas <code>HttpOnly</code> + <code>SameSite=Lax</code>, y los enlaces de recuperación caducan en 1 hora y son de un solo uso.
+        </p>
+      </article>
+    </div>
+  </div>
+
+  <div class="text-center mt-5">
+    <div class="bg-light p-4 rounded-3 d-inline-block">
+      <p class="mb-2 small text-muted">
+        <i class="fa-solid fa-circle-info me-1"></i>
+        ¿Quieres detalles técnicos completos?
+      </p>
+      <a href="help#security" class="btn btn-sm btn-outline-success">
+        <i class="fa-solid fa-file-shield me-1"></i> Ver documentación de seguridad
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── FEATURES ─────────── -->
 <section id="features" class="py-5">
   <h2 class="text-center fw-bold mb-5">Una sala. Cualquier idioma.</h2>
   <div class="row g-4">
@@ -70,21 +177,21 @@
       <article class="card h-100 p-4 bm-shadow-sm">
         <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-language"></i></div>
         <h3 class="h5 fw-bold">Traducción de voz en vivo</h3>
-        <p class="text-muted mb-0">Cada participante escucha al resto en su propio idioma, con voz natural y baja latencia — sin esperar, sin leer subtítulos.</p>
+        <p class="text-muted mb-0">Cada participante escucha al resto en su propio idioma, con voz natural y baja latencia — sin esperar, sin leer subtítulos obligados.</p>
       </article>
     </div>
     <div class="col-md-4">
       <article class="card h-100 p-4 bm-shadow-sm">
         <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-video"></i></div>
-        <h3 class="h5 fw-bold">Video WebRTC seguro</h3>
-        <p class="text-muted mb-0">Salas con un clic, sin instalar nada. Conexión cifrada entre participantes desde el navegador.</p>
+        <h3 class="h5 fw-bold">Video WebRTC directo</h3>
+        <p class="text-muted mb-0">Salas con un clic, sin instalar nada. Tu video llega al otro extremo cifrado y sin escalas, igual que en una llamada cifrada de extremo a extremo.</p>
       </article>
     </div>
     <div class="col-md-4">
       <article class="card h-100 p-4 bm-shadow-sm">
         <div class="text-primary mb-3" style="font-size:1.75rem"><i class="fa-solid fa-user-group"></i></div>
         <h3 class="h5 fw-bold">Equipos globales</h3>
-        <p class="text-muted mb-0">Pensado para reuniones de trabajo entre personas de distintas lenguas y zonas horarias, sin descargar nada.</p>
+        <p class="text-muted mb-0">Diseñado para reuniones de trabajo entre personas de distintas lenguas y zonas horarias. Tu empresa, tu gente, tu idioma.</p>
       </article>
     </div>
   </div>

@@ -1,0 +1,185 @@
+<%- include('partials/admin-subnav', { active: 'companies' }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1">Empresas</h1>
+    <p class="text-muted mb-0">Cada usuario pertenece a una empresa. Los usuarios solo pueden buscar y conectarse con personas de su propia empresa.</p>
+  </div>
+  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newCompanyModal">
+    <i class="fa-solid fa-plus me-1"></i> Nueva empresa
+  </button>
+</div>
+
+<% if (typeof flash !== 'undefined' && flash) { %>
+  <div class="alert alert-success alert-dismissible fade show" role="alert">
+    <%= flash %>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+<% } %>
+<% if (typeof flashError !== 'undefined' && flashError) { %>
+  <div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <%= flashError %>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+<% } %>
+
+<form method="get" action="admin/companies" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-8">
+      <label class="form-label">Buscar (nombre o código)</label>
+      <input type="text" class="form-control" name="search" value="<%= search || '' %>" placeholder="Ej. ACME o ACMECO">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Estado</label>
+      <select class="form-select" name="status">
+        <option value="" <%= !status ? 'selected' : '' %>>Todas</option>
+        <option value="active" <%= status==='active' ? 'selected' : '' %>>Activas</option>
+        <option value="inactive" <%= status==='inactive' ? 'selected' : '' %>>Inactivas</option>
+      </select>
+    </div>
+    <div class="col-md-1 d-grid">
+      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
+    </div>
+  </div>
+</form>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Estado</th>
+          <th>Usuarios</th>
+          <th>Creada</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (!companies || companies.length === 0) { %>
+          <tr><td colspan="7" class="text-center text-muted py-4">Sin empresas. Crea la primera con el botón "Nueva empresa".</td></tr>
+        <% } %>
+        <% (companies || []).forEach(function(c) { %>
+          <tr>
+            <td><%= c.id %></td>
+            <td>
+              <code class="bg-light px-2 py-1 rounded fw-bold" style="letter-spacing:0.15em;"><%= c.code %></code>
+            </td>
+            <td>
+              <span class="fw-semibold"><%= c.name %></span>
+            </td>
+            <td>
+              <% if (c.is_active) { %>
+                <span class="badge bg-success">Activa</span>
+              <% } else { %>
+                <span class="badge bg-secondary">Inactiva</span>
+              <% } %>
+            </td>
+            <td>
+              <span class="badge bg-light text-dark border"><%= c.user_count || 0 %></span>
+            </td>
+            <td class="small text-muted">
+              <%= c.created_at ? new Date(c.created_at).toISOString().slice(0,10) : '' %>
+            </td>
+            <td class="text-end">
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-primary"
+                        data-bs-toggle="modal" data-bs-target="#editCompanyModal"
+                        data-id="<%= c.id %>"
+                        data-code="<%= c.code %>"
+                        data-name="<%= c.name %>"
+                        data-active="<%= c.is_active ? '1' : '0' %>"
+                        title="Editar">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+                <form method="post" action="admin/companies/<%= c.id %>/toggle" class="d-inline">
+                  <button type="submit" class="btn btn-outline-<%= c.is_active ? 'warning' : 'success' %>" title="<%= c.is_active ? 'Desactivar' : 'Activar' %>">
+                    <i class="fa-solid <%= c.is_active ? 'fa-pause' : 'fa-play' %>"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<p class="text-muted mt-2 small">Mostrando hasta 200 empresas.</p>
+
+<!-- Modal: New company -->
+<div class="modal fade" id="newCompanyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="admin/companies" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-building me-2"></i>Nueva empresa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Nombre de la empresa</label>
+          <input type="text" class="form-control" name="name" required maxlength="120" placeholder="Ej. ACME Corporation">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Código de empresa (6 letras)</label>
+          <input type="text" class="form-control text-uppercase" name="code" required
+                 minlength="6" maxlength="6" pattern="[A-Za-z]{6}"
+                 placeholder="ACMECO" style="letter-spacing:0.2em;font-weight:600;">
+          <div class="form-text">Los usuarios introducirán este código al registrarse. Solo letras, exactamente 6.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus me-1"></i> Crear empresa</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Edit company -->
+<div class="modal fade" id="editCompanyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="" id="editCompanyForm" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-pen me-2"></i>Editar empresa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Nombre de la empresa</label>
+          <input type="text" class="form-control" name="name" id="editCompanyName" required maxlength="120">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Código (6 letras)</label>
+          <input type="text" class="form-control text-uppercase" name="code" id="editCompanyCode"
+                 required minlength="6" maxlength="6" pattern="[A-Za-z]{6}"
+                 style="letter-spacing:0.2em;font-weight:600;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function() {
+  var modal = document.getElementById('editCompanyModal');
+  if (!modal) return;
+  modal.addEventListener('show.bs.modal', function(event) {
+    var button = event.relatedTarget;
+    if (!button) return;
+    var id = button.getAttribute('data-id');
+    var code = button.getAttribute('data-code') || '';
+    var name = button.getAttribute('data-name') || '';
+    document.getElementById('editCompanyForm').action = 'admin/companies/' + id;
+    document.getElementById('editCompanyCode').value = code;
+    document.getElementById('editCompanyName').value = name;
+  });
+})();
+</script>

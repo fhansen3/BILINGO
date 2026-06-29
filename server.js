@@ -12,6 +12,7 @@ process.on('unhandledRejection', (err) => {
 console.log('[boot] starting BiLingo Meet…');
 console.log('[boot] node', process.version, 'pid', process.pid);
 console.log('[boot] PORT env =', process.env.PORT, 'DB_HOST set?', !!process.env.DB_HOST);
+console.log('[boot] BASE_PATH =', JSON.stringify(process.env.BASE_PATH || ''));
 
 const path = require('path');
 const express = require('express');
@@ -70,6 +71,13 @@ app.use('/', publicRoutes);
 //   /dashboard, /profile, /account-settings
 // Mounted BEFORE the SPA fallback so these paths render real pages.
 app.use('/', require('./routes/app'));
+
+// Friendly aliases so legacy links (/app, /app/profile) that used to hit the
+// SPA now land on the server-rendered EJS pages where the sidebar with the
+// admin menu lives.
+app.get('/app', (req, res) => res.redirect('dashboard'));
+app.get('/app/profile', (req, res) => res.redirect('profile'));
+app.get('/app/account', (req, res) => res.redirect('account-settings'));
 
 // Meetings setup (server-rendered EJS):
 //   POST /meetings/instant, POST /rooms/new

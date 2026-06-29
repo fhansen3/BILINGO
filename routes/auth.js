@@ -25,6 +25,7 @@ const crypto = require('crypto');
 const db = require('../config/db');
 const { hashPassword, verifyPassword } = require('../utils/hash');
 const { redirectIfAuthed } = require('../middleware/requireAuth');
+const activation = require('../services/activation.service');
 
 const AVATAR_COLORS = ['#58CC02', '#1CB0F6', '#FF9600', '#CE82FF', '#FF4B4B', '#FFC800', '#2B70C9'];
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -55,16 +56,24 @@ function publicUser(row) {
     avatar_color: row.avatar_color,
     native_language: row.native_language,
     learning_language: row.learning_language,
+    company_id: row.company_id || null,
     role: row.role,
     plan: row.plan || 'free'
   };
 }
 
+// Returns a same-origin path WITHOUT a leading slash, so it can be used
+// directly in res.redirect() under the reverse-proxy at /run/<id>/.
+// Accepts inputs with or without a leading slash; rejects protocol-relative
+// (//evil.com) and absolute URLs.
 function safeNext(input) {
-  if (!input) return '/dashboard';
-  const s = String(input);
-  // Only allow same-origin paths.
-  if (!s.startsWith('/') || s.startsWith('//')) return '/dashboard';
+  if (!input) return 'dashboard';
+  let s = String(input);
+  // Reject protocol-relative or absolute URLs.
+  if (s.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(s)) return 'dashboard';
+  // Strip ONE leading slash if present.
+  if (s.startsWith('/')) s = s.slice(1);
+  if (!s) return 'dashboard';
   return s;
 }
 
@@ -80,7 +89,7 @@ router.get('/signup', redirectIfAuthed, async (req, res) => {
     nav: 'auth-back',
     user: null,
     languages,
-    form: { email: '', displayName: '', nativeLanguage: '', learningLanguage: '' },
+    form: { email: '', displayName: '', nativeLanguage: '', companyCode: '' },
     error: null
   });
 });
@@ -90,9 +99,9 @@ router.post('/signup', async (req, res, next) => {
   const password = String(req.body.password || '');
   const displayName = String(req.body.displayName || req.body.display_name || '').trim();
   const nativeLanguage = String(req.body.nativeLanguage || req.body.native_language || '').trim() || null;
-  const learningLanguage = String(req.body.learningLanguage || req.body.learning_language || '').trim() || null;
+  const companyCode = String(req.body.companyCode || req.body.company_code || '').trim().toUpperCase();
 
-  const form = { email, displayName, nativeLanguage: nativeLanguage || '', learningLanguage: learningLanguage || '' };
+  const form = { email, displayName, nativeLanguage: nativeLanguage || '', companyCode };
 
   async function renderError(error) {
     const languages = await getLanguages();
@@ -117,6 +126,22 @@ router.post('/signup', async (req, res, next) => {
     if (password.length < 6) {
       return renderError('La contraseña debe tener al menos 6 caracteres.');
     }
+    if (!nativeLanguage) {
+      return renderError('Selecciona tu idioma nativo.');
+    }
+    if (!/^[A-Z]{6}$/.test(companyCode)) {
+      return renderError('El código de empresa debe tener exactamente 6 letras.');
+    }
+
+    // Resolve company by code (must be active).
+    const companyRows = await db.query(
+      'SELECT id, name FROM companies WHERE code = ? AND is_active = 1',
+      [companyCode]
+    );
+    if (!companyRows.length) {
+      return renderError('Código de empresa inválido. Verifícalo con tu administrador.');
+    }
+    const companyId = companyRows[0].id;
 
     const existing = await db.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length) {
@@ -141,13 +166,14 @@ router.post('/signup', async (req, res, next) => {
     const result = await db.query(
       `INSERT INTO users
          (email, password_hash, display_name, avatar_color,
-          native_language, learning_language, preferred_voice, last_login_at)
+          native_language, preferred_voice, company_id, last_login_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [email, hash, displayName, color, nativeLanguage, learningLanguage, preferredVoice]
+      [email, hash, displayName, color, nativeLanguage, preferredVoice, companyId]
     );
 
     const rows = await db.query(
-      `SELECT id, email, display_name, avatar_color, native_language, learning_language, role, plan
+      `SELECT id, email, display_name, avatar_color, native_language, learning_language,
+              company_id, role, plan
        FROM users WHERE id = ?`,
       [result.insertId]
     );
@@ -157,9 +183,9 @@ router.post('/signup', async (req, res, next) => {
 
     // Honor JSON clients (curl, fetch with Accept: application/json)
     if (req.accepts(['html', 'json']) === 'json') {
-      return res.status(201).json({ ok: true, user, redirect: '/dashboard' });
+      return res.status(201).json({ ok: true, user, redirect: 'dashboard' });
     }
-    return res.redirect('/dashboard');
+    return res.redirect('dashboard');
   } catch (err) { next(err); }
 });
 
@@ -203,7 +229,13 @@ router.post('/login', async (req, res, next) => {
       return renderError('Introduce email y contraseña.', 400);
     }
 
-    const rows = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+    const rows = await db.query(
+      `SELECT u.*, c.code AS company_code, c.name AS company_name
+         FROM users u
+         LEFT JOIN companies c ON c.id = u.company_id
+        WHERE u.email = ?`,
+      [email]
+    );
     if (!rows.length) {
       return renderError('Email o contraseña incorrectos.');
     }
@@ -241,16 +273,16 @@ router.post('/logout', (req, res) => {
   if (req.session) req.session = null;
   res.clearCookie('token'); // also clear JWT cookie if present, for a clean logout
   if (req.accepts(['html', 'json']) === 'json') {
-    return res.json({ ok: true, redirect: '/' });
+    return res.json({ ok: true, redirect: '.' });
   }
-  return res.redirect('/');
+  return res.redirect('.');
 });
 
 // Convenience: allow GET /logout too (some links use plain anchors).
 router.get('/logout', (req, res) => {
   if (req.session) req.session = null;
   res.clearCookie('token');
-  return res.redirect('/');
+  return res.redirect('.');
 });
 
 // ---------------------------------------------------------------------------
@@ -404,9 +436,70 @@ router.post('/reset-password/:token', async (req, res, next) => {
     await db.query('UPDATE password_resets SET used_at = NOW() WHERE id = ?', [reset.id]);
 
     if (req.accepts(['html', 'json']) === 'json') {
-      return res.json({ ok: true, redirect: '/login?reset=1' });
+      return res.json({ ok: true, redirect: 'login?reset=1' });
     }
-    return res.redirect('/login?reset=1');
+    return res.redirect('../login?reset=1');
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// Account activation (magic link issued by admin)
+// ---------------------------------------------------------------------------
+
+router.get('/activate/:token', async (req, res, next) => {
+  try {
+    const t = await activation.findValidToken(req.params.token);
+    return res.render('activate', {
+      title: 'Activar cuenta · BiLingo Meet',
+      description: 'Activa tu cuenta y elige una contraseña.',
+      nav: 'auth-back',
+      user: null,
+      token: req.params.token,
+      valid: !!t,
+      activationEmail: t ? t.email : null,
+      activationName: t ? t.display_name : null,
+      error: t ? null : 'Este enlace de activación no es válido o ha caducado.'
+    });
+  } catch (err) { next(err); }
+});
+
+router.post('/activate/:token', async (req, res, next) => {
+  const password = String(req.body.password || '');
+  const confirm = String(req.body.confirm || req.body.password_confirm || '');
+  try {
+    const t = await activation.findValidToken(req.params.token);
+    if (!t) {
+      return res.status(400).render('activate', {
+        title: 'Activar cuenta · BiLingo Meet',
+        description: 'Activa tu cuenta.',
+        nav: 'auth-back', user: null,
+        token: req.params.token, valid: false,
+        activationEmail: null, activationName: null,
+        error: 'Este enlace de activación no es válido o ha caducado.'
+      });
+    }
+    if (password.length < 6) {
+      return res.status(400).render('activate', {
+        title: 'Activar cuenta · BiLingo Meet',
+        description: 'Activa tu cuenta.',
+        nav: 'auth-back', user: null,
+        token: req.params.token, valid: true,
+        activationEmail: t.email, activationName: t.display_name,
+        error: 'La contraseña debe tener al menos 6 caracteres.'
+      });
+    }
+    if (password !== confirm) {
+      return res.status(400).render('activate', {
+        title: 'Activar cuenta · BiLingo Meet',
+        description: 'Activa tu cuenta.',
+        nav: 'auth-back', user: null,
+        token: req.params.token, valid: true,
+        activationEmail: t.email, activationName: t.display_name,
+        error: 'Las contraseñas no coinciden.'
+      });
+    }
+    await activation.consumeToken(t.id, t.user_id, password);
+    return res.redirect('login?reset=1');
   } catch (err) { next(err); }
 });
 

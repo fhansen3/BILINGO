@@ -84,31 +84,18 @@
             <% } %>
           </div>
 
-          <div class="row g-2 mb-3">
-            <div class="col-md-6">
-              <label for="nativeLanguage" class="form-label">Hablo en</label>
-              <select class="form-select" id="nativeLanguage" name="nativeLanguage" required>
-                <option value="">— Elegir —</option>
-                <% (languages || []).forEach(function(l) { %>
-                  <option value="<%= l.code %>"
-                    <%= ((form && form.nativeLanguage) || u.native_language) === l.code ? 'selected' : '' %>>
-                    <%= l.native_name || l.name %>
-                  </option>
-                <% }); %>
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label for="targetLanguage" class="form-label">Quiero escuchar/leer en</label>
-              <select class="form-select" id="targetLanguage" name="targetLanguage" required>
-                <option value="">— Elegir —</option>
-                <% (languages || []).forEach(function(l) { %>
-                  <option value="<%= l.code %>"
-                    <%= ((form && form.targetLanguage) || u.learning_language) === l.code ? 'selected' : '' %>>
-                    <%= l.native_name || l.name %>
-                  </option>
-                <% }); %>
-              </select>
-            </div>
+          <div class="mb-3">
+            <label for="nativeLanguage" class="form-label">Mi idioma nativo</label>
+            <select class="form-select" id="nativeLanguage" name="nativeLanguage" required>
+              <option value="">— Elegir —</option>
+              <% (languages || []).forEach(function(l) { %>
+                <option value="<%= l.code %>"
+                  <%= ((form && form.nativeLanguage) || u.native_language) === l.code ? 'selected' : '' %>>
+                  <%= l.native_name || l.name %>
+                </option>
+              <% }); %>
+            </select>
+            <div class="form-text">Hablarás en este idioma. Los demás te escucharán traducido al suyo.</div>
           </div>
 
           <div class="mb-3">

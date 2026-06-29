@@ -40,9 +40,17 @@
       navigate('dashboard');
       return;
     }
-    if (route.name === 'admin' && !window.Auth.isAdmin()) {
-      window.UI.notify('Acceso solo para administradores', 'error');
-      navigate('dashboard');
+    // The admin panel is server-rendered (EJS) — redirect there instead of
+    // rendering it inside the SPA, which only knew about role === 'admin'.
+    if (route.name === 'admin') {
+      if (!window.Auth.isAdmin()) {
+        window.UI.notify('Acceso solo para administradores', 'error');
+        navigate('dashboard');
+        return;
+      }
+      // Hard navigate to the server-rendered admin page (relative path works
+      // under the /run/<projectId>/ proxy).
+      window.location.href = 'admin';
       return;
     }
 

@@ -2,14 +2,19 @@
   'use strict';
 
   function navbar(user) {
-    var isAdmin = user.role === 'admin';
+    // Use central Auth helper which recognises superadmin / admin / company_admin
+    var isAdmin = (window.Auth && window.Auth.isAdmin && window.Auth.isAdmin())
+      || (user && (user.role === 'admin' || user.role === 'superadmin' || user.role === 'company_admin'));
+    // Admin link goes to the server-rendered /admin page (NOT the broken SPA #/admin route).
+    // Relative path works inside the /run/<projectId>/ proxy.
+    var adminHref = 'admin';
     return '<nav class="navbar-bl">' +
       '<a href="#/dashboard" class="brand" style="text-decoration:none"><span class="parrot">🦜</span> BiLingo Meet</a>' +
       '<div class="nav-links">' +
         '<a href="#/dashboard" class="nav-link"><i class="fa-solid fa-house"></i> Inicio</a>' +
         '<a href="#/partners" class="nav-link"><i class="fa-solid fa-users"></i> Contactos</a>' +
         '<a href="#/profile" class="nav-link"><i class="fa-solid fa-user"></i> Perfil</a>' +
-        (isAdmin ? '<a href="#/admin" class="nav-link"><i class="fa-solid fa-shield-halved"></i> Admin</a>' : '') +
+        (isAdmin ? '<a href="' + adminHref + '" class="nav-link"><i class="fa-solid fa-shield-halved"></i> Admin</a>' : '') +
         '<button class="nav-link" id="logout-btn"><i class="fa-solid fa-right-from-bracket"></i> Salir</button>' +
       '</div>' +
     '</nav>';
@@ -84,7 +89,6 @@
       statsEl.innerHTML =
         statCard('fa-video', 'bg-green', mine.length, 'Reuniones totales') +
         statCard('fa-clock', 'bg-blue', Math.round(totalMin), 'Minutos en reuniones') +
-        statCard('fa-language', 'bg-orange', user.learning_language || '—', 'Idioma de trabajo') +
         statCard('fa-flag', 'bg-purple', user.native_language || '—', 'Idioma nativo');
 
       var roomsEl = container.querySelector('#my-rooms');

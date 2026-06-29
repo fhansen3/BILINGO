@@ -363,13 +363,226 @@ const VALID_GENDERS = ['male', 'female', 'neutral'];
 const VALID_DELIVERY = ['voice', 'text', 'both'];
 
 // ---------------------------------------------------------------------------
-// GET /m/:code/lobby   →  pre_join_lobby.ejs
+// GET /m/:code/guest   →  guest_join.ejs   (PUBLIC — for users without account)
 // ---------------------------------------------------------------------------
-router.get('/m/:code/lobby', requireAuth, async (req, res, next) => {
+router.get('/m/:code/guest', async (req, res, next) => {
   try {
     const code = String(req.params.code || '').trim().toLowerCase();
     const meeting = await loadMeeting(code);
     if (!meeting) return notFound(req, res);
+
+    // If they ARE logged in, send them to the regular lobby — guests are the
+    // exception, not the rule.
+    if (req.session && req.session.user && req.session.user.id) {
+      return res.redirect(`m/${meeting.room_code}/lobby`);
+    }
+
+    const languages = await loadLanguages();
+    res.render('guest_join', {
+      title: (meeting.name || 'Reunión') + ' · Invitado · BiLingo Meet',
+      description: 'Únete a la reunión como invitado.',
+      nav: 'public',
+      active: null,
+      user: null,
+      meeting,
+      languages,
+      form: null,
+      error: null
+    });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// POST /m/:code/guest   →  create guest participant + redirect to room (PUBLIC)
+// ---------------------------------------------------------------------------
+router.post('/m/:code/guest', async (req, res, next) => {
+  try {
+    const code = String(req.params.code || '').trim().toLowerCase();
+    const meeting = await loadMeeting(code);
+    if (!meeting) return notFound(req, res);
+
+    const body = req.body || {};
+    const displayName = String(body.displayName || '').trim();
+    const nativeLanguage = String(body.nativeLanguage || '').trim().toLowerCase();
+
+    const languages = await loadLanguages();
+    const validCodes = new Set(languages.map(l => l.code));
+
+    function reRender(error) {
+      return res.status(400).render('guest_join', {
+        title: (meeting.name || 'Reunión') + ' · Invitado · BiLingo Meet',
+        description: 'Únete a la reunión como invitado.',
+        nav: 'public',
+        active: null,
+        user: null,
+        meeting,
+        languages,
+        form: { displayName, nativeLanguage },
+        error
+      });
+    }
+
+    if (!displayName) return reRender('Ingresa tu nombre.');
+    if (displayName.length > 100) return reRender('Tu nombre es demasiado largo.');
+    if (!nativeLanguage || !validCodes.has(nativeLanguage)) {
+      return reRender('Selecciona un idioma nativo válido.');
+    }
+
+    // Decide initial status (waiting room gate).
+    const waitingEnabled = !!meeting.waiting_room_enabled;
+    const initialStatus = waitingEnabled ? 'waiting' : 'admitted';
+
+    // Guests have user_id = NULL. We mirror native_language into target_language
+    // because target_language is no longer collected in the UI but the column
+    // is still NOT NULL-friendly downstream — the realtime layer ignores it.
+    const result = await db.query(
+      `INSERT INTO meeting_participants
+         (room_id, user_id, display_name, is_guest,
+          native_language, target_language,
+          speaking_voice_gender, listening_voice_gender,
+          delivery_mode, captions_enabled,
+          status, joined_at, admitted_at)
+       VALUES (?, NULL, ?, 1, ?, ?, 'female', 'female', 'both', 1, ?, NOW(), ?)`,
+      [meeting.id, displayName, nativeLanguage, nativeLanguage,
+       initialStatus, initialStatus === 'admitted' ? new Date() : null]
+    );
+    const participantId = result.insertId;
+
+    // Use a guest-only sub-session so the waiting page / room can identify them.
+    // We do NOT set req.session.user — they remain unauthenticated.
+    if (req.session) {
+      req.session.guestParticipantId = participantId;
+      req.session.guestMeetingCode = meeting.room_code;
+      req.session.activeParticipantId = participantId;
+      req.session.activeMeetingCode = meeting.room_code;
+    }
+
+    if (initialStatus === 'waiting') {
+      return res.redirect(`m/${meeting.room_code}/guest-waiting`);
+    }
+    return res.redirect(`m/${meeting.room_code}/guest-room`);
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// GET /m/:code/guest-waiting  →  simple waiting-room page (PUBLIC)
+// ---------------------------------------------------------------------------
+router.get('/m/:code/guest-waiting', async (req, res, next) => {
+  try {
+    const code = String(req.params.code || '').trim().toLowerCase();
+    const meeting = await loadMeeting(code);
+    if (!meeting) return notFound(req, res);
+
+    const pid = req.session && req.session.guestParticipantId;
+    if (!pid) return res.redirect(`m/${meeting.room_code}/guest`);
+
+    const rows = await db.query(
+      `SELECT id, room_id, display_name, status
+         FROM meeting_participants
+        WHERE id = ? AND room_id = ?`,
+      [pid, meeting.id]
+    );
+    const participant = rows[0];
+    if (!participant) return res.redirect(`m/${meeting.room_code}/guest`);
+    if (participant.status === 'admitted') {
+      return res.redirect(`m/${meeting.room_code}/guest-room`);
+    }
+
+    res.render('waiting_room', {
+      title: 'Sala de espera · BiLingo Meet',
+      description: 'Esperando a que el anfitrión te deje entrar.',
+      nav: 'public',
+      active: null,
+      user: null,
+      meeting,
+      participant
+    });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// GET /m/:code/guest-room  →  in_meeting_room.ejs for unauthenticated guests
+// ---------------------------------------------------------------------------
+router.get('/m/:code/guest-room', async (req, res, next) => {
+  try {
+    const code = String(req.params.code || '').trim().toLowerCase();
+    const meeting = await loadMeeting(code);
+    if (!meeting) return notFound(req, res);
+
+    const pid = req.session && req.session.guestParticipantId;
+    if (!pid) return res.redirect(`m/${meeting.room_code}/guest`);
+
+    const rows = await db.query(
+      `SELECT id, display_name, native_language, target_language,
+              speaking_voice_gender, listening_voice_gender,
+              delivery_mode, captions_enabled, status
+         FROM meeting_participants
+        WHERE id = ? AND room_id = ?`,
+      [pid, meeting.id]
+    );
+    const participant = rows[0];
+    if (!participant) return res.redirect(`m/${meeting.room_code}/guest`);
+    if (participant.status === 'waiting') {
+      return res.redirect(`m/${meeting.room_code}/guest-waiting`);
+    }
+    if (participant.status !== 'admitted') {
+      return res.redirect('');
+    }
+
+    // Promote room to active if needed.
+    if (meeting.status !== 'active' && meeting.status !== 'ended' && meeting.status !== 'closed') {
+      await db.query(
+        `UPDATE rooms SET status='active', started_at = COALESCE(started_at, NOW()) WHERE id = ?`,
+        [meeting.id]
+      );
+      meeting.status = 'active';
+      if (!meeting.started_at) meeting.started_at = new Date();
+    }
+
+    const participants = await db.query(
+      `SELECT mp.id, mp.user_id, mp.display_name, mp.native_language, mp.target_language,
+              mp.delivery_mode, mp.captions_enabled, mp.status,
+              u.avatar_color
+         FROM meeting_participants mp
+         LEFT JOIN users u ON u.id = mp.user_id
+        WHERE mp.room_id = ? AND mp.status = 'admitted'
+        ORDER BY mp.admitted_at ASC, mp.id ASC`,
+      [meeting.id]
+    );
+
+    res.render('in_meeting_room', {
+      title: (meeting.name || 'Reunión') + ' · BiLingo Meet',
+      description: 'Sala de reunión BiLingo Meet en curso.',
+      layout: false,
+      nav: 'public',
+      active: null,
+      user: null,
+      meeting,
+      participant,
+      participants,
+      isHost: false
+    });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// GET /m/:code/lobby   →  pre_join_lobby.ejs
+// If the user is NOT logged in, redirect them to the guest flow instead of
+// to the login page (so invitation links work for anyone).
+// ---------------------------------------------------------------------------
+router.get('/m/:code/lobby', async (req, res, next) => {
+  try {
+    const code = String(req.params.code || '').trim().toLowerCase();
+    const meeting = await loadMeeting(code);
+    if (!meeting) return notFound(req, res);
+
+    // Unauthenticated → send to guest join flow.
+    if (!(req.session && req.session.user && req.session.user.id)) {
+      return res.redirect(`m/${meeting.room_code}/guest`);
+    }
+
+    // From here we know there is a session user.
+    req.user = req.session.user;
 
     const languages = await loadLanguages();
 
@@ -399,7 +612,10 @@ router.post('/m/:code/join', requireAuth, async (req, res, next) => {
     const body = req.body || {};
     const displayName = String(body.displayName || '').trim();
     const nativeLanguage = String(body.nativeLanguage || '').trim().toLowerCase();
-    const targetLanguage = String(body.targetLanguage || '').trim().toLowerCase();
+    // target_language is no longer asked: BiLingo Meet uses ONE language per
+    // participant (their native one). Other participants automatically
+    // translate to it. We mirror native→target for legacy schema compat.
+    const targetLanguage = nativeLanguage;
     const speakingVoiceGender = String(body.speakingVoiceGender || '').trim().toLowerCase();
     const listeningVoiceGender = String(body.listeningVoiceGender || '').trim().toLowerCase();
     const deliveryMode = String(body.deliveryMode || 'both').trim().toLowerCase();
@@ -421,7 +637,6 @@ router.post('/m/:code/join', requireAuth, async (req, res, next) => {
         form: {
           displayName,
           nativeLanguage,
-          targetLanguage,
           speakingVoiceGender,
           listeningVoiceGender,
           deliveryMode,
@@ -435,12 +650,6 @@ router.post('/m/:code/join', requireAuth, async (req, res, next) => {
     if (displayName.length > 100) return reRender('Tu nombre es demasiado largo.');
     if (!nativeLanguage || !validCodes.has(nativeLanguage)) {
       return reRender('Elige un idioma nativo válido.');
-    }
-    if (!targetLanguage || !validCodes.has(targetLanguage)) {
-      return reRender('Elige un idioma objetivo válido.');
-    }
-    if (nativeLanguage === targetLanguage) {
-      return reRender('El idioma nativo y el objetivo deben ser distintos.');
     }
     const spk = VALID_GENDERS.includes(speakingVoiceGender) ? speakingVoiceGender : 'female';
     const lst = VALID_GENDERS.includes(listeningVoiceGender) ? listeningVoiceGender : 'female';

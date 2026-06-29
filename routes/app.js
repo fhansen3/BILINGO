@@ -18,6 +18,7 @@ const router = require('express').Router();
 const db = require('../config/db');
 const { requireAuth } = require('../middleware/requireAuth');
 const { hashPassword, verifyPassword } = require('../utils/hash');
+const costsService = require('../services/costs.service');
 
 const AVATAR_COLORS = ['#58CC02', '#1CB0F6', '#FF9600', '#CE82FF', '#FF4B4B', '#FFC800', '#2B70C9', '#4F46E5'];
 const DELIVERY_MODES = ['voice', 'text', 'both'];
@@ -49,7 +50,7 @@ async function loadFullUser(id) {
             preferred_voice,
             default_native_voice_gender, default_target_voice_gender,
             default_delivery_mode, default_captions_enabled,
-            proficiency_level, country, role, status, plan,
+            proficiency_level, country, company_id, role, status, plan,
             is_online, last_seen, last_login_at, created_at
      FROM users WHERE id = ?`,
     [id]
@@ -105,6 +106,27 @@ router.get('/dashboard', requireAuth, async (req, res, next) => {
       [userId, userId]
     );
 
+    // Cost indicators (only for admin roles).
+    // - superadmin/admin → global view (companyId = null)
+    // - company_admin    → scoped to their company
+    let costTotals = null;
+    let audioMinutes = null;
+    const role = full && full.role;
+    const isAdmin = role === 'superadmin' || role === 'admin' || role === 'company_admin';
+    if (isAdmin) {
+      try {
+        const scopeCompanyId = (role === 'company_admin') ? (full.company_id || null) : null;
+        const [totals, minutes] = await Promise.all([
+          costsService.getTotals(scopeCompanyId),
+          costsService.getAudioMinutes(scopeCompanyId)
+        ]);
+        costTotals = totals;
+        audioMinutes = minutes;
+      } catch (e) {
+        console.error('[dashboard] failed to load cost totals', e && e.message);
+      }
+    }
+
     res.render('dashboard', {
       title: 'Panel · BiLingo Meet',
       description: 'Tu panel de BiLingo Meet: crea reuniones, programa o únete con un código.',
@@ -112,7 +134,10 @@ router.get('/dashboard', requireAuth, async (req, res, next) => {
       active: 'dashboard',
       user: full,
       upcoming,
-      recent
+      recent,
+      isAdmin,
+      costTotals,
+      audioMinutes
     });
   } catch (err) { next(err); }
 });

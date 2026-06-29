@@ -1,0 +1,147 @@
+<%
+  const m = meeting || {};
+%>
+<div class="row g-4 justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <div>
+            <div class="text-muted small">Te han invitado a una reunión</div>
+            <h4 class="mb-1"><%= m.name || 'Reunión' %></h4>
+            <div class="small text-muted">Código: <code><%= m.room_code %></code></div>
+          </div>
+          <a href="" class="btn btn-link text-decoration-none">
+            <i class="fa-solid fa-xmark"></i> Cancelar
+          </a>
+        </div>
+
+        <div class="ratio ratio-16x9 bg-dark rounded mb-3 position-relative overflow-hidden">
+          <video id="guestPreview" autoplay muted playsinline
+                 style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
+          <div id="guestPreviewMsg"
+               class="position-absolute top-50 start-50 translate-middle text-white text-center small"
+               style="display:none;">
+            <i class="fa-solid fa-video-slash fa-2x mb-2"></i><br>
+            Cámara desactivada
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small text-muted mb-1">Nivel de micrófono</label>
+          <div class="progress" style="height:10px;">
+            <div id="guestVu" class="progress-bar bg-success" role="progressbar"
+                 style="width:0%;transition:width 80ms linear;"></div>
+          </div>
+        </div>
+
+        <div class="alert alert-info small mb-0">
+          <i class="fa-solid fa-shield-halved me-1"></i>
+          Tu audio y video viajan <strong>cifrados directamente</strong> con los demás participantes (WebRTC + DTLS-SRTP). No pasan por ningún servidor central.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">
+          <i class="fa-solid fa-user-plus me-2 text-primary"></i>
+          Únete como invitado
+        </h5>
+
+        <% if (typeof error !== 'undefined' && error) { %>
+          <div class="alert alert-danger py-2 small mb-3"><%= error %></div>
+        <% } %>
+
+        <form method="POST" action="m/<%= m.room_code %>/guest" id="guestJoinForm">
+          <div class="mb-3">
+            <label for="displayName" class="form-label fw-semibold">Tu nombre</label>
+            <input type="text" class="form-control" id="displayName" name="displayName"
+                   maxlength="100" required
+                   placeholder="Ej. María López"
+                   value="<%= (form && form.displayName) || '' %>">
+            <div class="form-text">Cómo te verán los demás participantes en la reunión.</div>
+          </div>
+
+          <div class="mb-4">
+            <label for="nativeLanguage" class="form-label fw-semibold">Tu idioma nativo</label>
+            <select class="form-select" id="nativeLanguage" name="nativeLanguage" required>
+              <option value="">— Elegir —</option>
+              <% (languages || []).forEach(function(l) { %>
+                <option value="<%= l.code %>"
+                  <%= ((form && form.nativeLanguage)) === l.code ? 'selected' : '' %>>
+                  <%= l.native_name || l.name %>
+                </option>
+              <% }); %>
+            </select>
+            <div class="form-text">Hablarás en este idioma. Los demás te escucharán traducido al suyo.</div>
+          </div>
+
+          <button type="submit" class="btn btn-primary w-100 btn-lg">
+            <i class="fa-solid fa-door-open me-1"></i> Entrar a la reunión
+          </button>
+
+          <hr class="my-3">
+
+          <p class="text-center text-muted small mb-0">
+            ¿Tienes cuenta de BiLingo Meet?
+            <a href="login?next=<%= encodeURIComponent('/m/' + m.room_code + '/lobby') %>" class="fw-semibold">Inicia sesión</a>
+          </p>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var videoEl = document.getElementById('guestPreview');
+  var previewMsg = document.getElementById('guestPreviewMsg');
+  var vu = document.getElementById('guestVu');
+  var currentStream = null;
+  var audioCtx = null, rafId = null;
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    previewMsg.style.display = 'block';
+    previewMsg.innerHTML = '<i class="fa-solid fa-triangle-exclamation fa-2x mb-2"></i><br>Tu navegador no soporta cámara/micrófono';
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(function(stream) {
+    currentStream = stream;
+    videoEl.srcObject = stream;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var src = audioCtx.createMediaStreamSource(stream);
+      var analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser);
+      var data = new Uint8Array(analyser.frequencyBinCount);
+      function tick() {
+        analyser.getByteTimeDomainData(data);
+        var sum = 0;
+        for (var i = 0; i < data.length; i++) {
+          var v = (data[i] - 128) / 128;
+          sum += v * v;
+        }
+        var rms = Math.sqrt(sum / data.length);
+        var pct = Math.min(100, Math.round(rms * 250));
+        vu.style.width = pct + '%';
+        rafId = requestAnimationFrame(tick);
+      }
+      tick();
+    } catch (e) { /* ignore */ }
+  }).catch(function() {
+    previewMsg.style.display = 'block';
+    previewMsg.innerHTML = '<i class="fa-solid fa-triangle-exclamation fa-2x mb-2"></i><br>No se pudo acceder a cámara/micrófono';
+  });
+
+  window.addEventListener('beforeunload', function() {
+    if (currentStream) currentStream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+    if (rafId) cancelAnimationFrame(rafId);
+    if (audioCtx) try{ audioCtx.close(); }catch(e){}
+  });
+})();
+</script>

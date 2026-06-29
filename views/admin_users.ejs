@@ -3,8 +3,13 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <div>
     <h1 class="h3 mb-1">Usuarios</h1>
-    <p class="text-muted mb-0">Buscar, suspender, activar y cambiar el rol de usuarios.</p>
+    <p class="text-muted mb-0">
+      <% if (isSuper) { %>Vista global. Puedes gestionar usuarios de cualquier empresa.<% } else { %>Vista de tu empresa.<% } %>
+    </p>
   </div>
+  <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newUserModal">
+    <i class="fa-solid fa-plus me-1"></i> Crear usuario
+  </button>
 </div>
 
 <% if (typeof flash !== 'undefined' && flash) { %>
@@ -19,22 +24,58 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
   </div>
 <% } %>
+<% if (typeof activationUrl !== 'undefined' && activationUrl) { %>
+  <div class="alert alert-info">
+    <div class="d-flex align-items-start gap-2">
+      <i class="fa-solid fa-link mt-1"></i>
+      <div class="flex-grow-1">
+        <div class="fw-semibold mb-1">Enlace de activación (válido 24 horas)</div>
+        <div class="small text-muted mb-2">Comparte este enlace con el usuario para que elija su contraseña.</div>
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control" id="activationLinkInput" value="<%= activationUrl %>" readonly>
+          <button class="btn btn-outline-primary" type="button" onclick="
+            var i=document.getElementById('activationLinkInput');
+            i.select(); document.execCommand('copy');
+            this.innerHTML='<i class=&quot;fa-solid fa-check&quot;></i> Copiado';
+          "><i class="fa-solid fa-copy"></i> Copiar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+<% } %>
 
-<form method="get" action="/admin/users" class="card card-body mb-3">
+<form method="get" action="admin/users" class="card card-body mb-3">
   <div class="row g-2 align-items-end">
-    <div class="col-md-5">
+    <div class="col-md-4">
       <label class="form-label">Buscar (email o nombre)</label>
       <input type="text" class="form-control" name="search" value="<%= search || '' %>" placeholder="Ej. ana@bilingo.io">
     </div>
+    <% if (isSuper) { %>
     <div class="col-md-3">
+      <label class="form-label">Empresa</label>
+      <select class="form-select" name="company">
+        <option value="" <%= !company ? 'selected' : '' %>>Todas</option>
+        <% (companies || []).forEach(function(c) { %>
+          <option value="<%= c.id %>" <%= String(company) === String(c.id) ? 'selected' : '' %>>
+            <%= c.code %> · <%= c.name %>
+          </option>
+        <% }); %>
+      </select>
+    </div>
+    <% } %>
+    <div class="col-md-2">
       <label class="form-label">Rol</label>
       <select class="form-select" name="role">
         <option value="" <%= !role ? 'selected' : '' %>>Todos</option>
         <option value="user" <%= role==='user' ? 'selected' : '' %>>Usuario</option>
-        <option value="admin" <%= role==='admin' ? 'selected' : '' %>>Admin</option>
+        <option value="company_admin" <%= role==='company_admin' ? 'selected' : '' %>>Admin empresa</option>
+        <% if (isSuper) { %>
+          <option value="admin" <%= role==='admin' ? 'selected' : '' %>>Admin</option>
+          <option value="superadmin" <%= role==='superadmin' ? 'selected' : '' %>>Superadmin</option>
+        <% } %>
       </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
       <label class="form-label">Estado</label>
       <select class="form-select" name="status">
         <option value="" <%= !status ? 'selected' : '' %>>Todos</option>
@@ -57,16 +98,17 @@
           <th>ID</th>
           <th>Usuario</th>
           <th>Email</th>
+          <th>Empresa</th>
           <th>Rol</th>
           <th>Estado</th>
-          <th>Idiomas</th>
+          <th>Idioma</th>
           <th>Creado</th>
           <th class="text-end">Acciones</th>
         </tr>
       </thead>
       <tbody>
         <% if (!users || users.length === 0) { %>
-          <tr><td colspan="8" class="text-center text-muted py-4">Sin resultados.</td></tr>
+          <tr><td colspan="9" class="text-center text-muted py-4">Sin resultados.</td></tr>
         <% } %>
         <% (users || []).forEach(function(u) { %>
           <tr>
@@ -77,38 +119,68 @@
               </span>
               <%= u.display_name %>
             </td>
-            <td><%= u.email %></td>
+            <td class="small"><%= u.email %></td>
             <td>
-              <span class="badge bg-<%= u.role==='admin' ? 'warning text-dark' : 'secondary' %>"><%= u.role %></span>
+              <% if (u.company_code) { %>
+                <code class="bg-light px-2 py-1 rounded fw-bold small"><%= u.company_code %></code>
+                <span class="small text-muted d-block mt-1" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><%= u.company_name %></span>
+              <% } else { %>
+                <span class="text-muted small">— Sin empresa —</span>
+              <% } %>
+            </td>
+            <td>
+              <% var roleBadge = 'secondary'; var roleText = u.role;
+                 if (u.role==='superadmin') { roleBadge='danger'; roleText='Superadmin'; }
+                 else if (u.role==='admin') { roleBadge='danger'; roleText='Admin'; }
+                 else if (u.role==='company_admin') { roleBadge='warning text-dark'; roleText='Admin empresa'; }
+                 else { roleText='Usuario'; }
+              %>
+              <span class="badge bg-<%= roleBadge %>"><%= roleText %></span>
             </td>
             <td>
               <% if (u.status==='active') { %><span class="badge bg-success">Activo</span><% } %>
               <% if (u.status==='suspended') { %><span class="badge bg-warning text-dark">Suspendido</span><% } %>
               <% if (u.status==='banned') { %><span class="badge bg-danger">Baneado</span><% } %>
             </td>
-            <td class="small text-muted">
-              <%= u.native_language || '—' %> → <%= u.learning_language || '—' %>
-            </td>
+            <td class="small text-muted"><%= u.native_language || '—' %></td>
             <td class="small text-muted"><%= u.created_at ? new Date(u.created_at).toISOString().slice(0,10) : '' %></td>
             <td class="text-end">
               <div class="btn-group btn-group-sm">
+                <% if (isSuper) { %>
+                <button type="button" class="btn btn-outline-secondary"
+                        data-bs-toggle="modal" data-bs-target="#assignCompanyModal"
+                        data-id="<%= u.id %>"
+                        data-name="<%= u.display_name %>"
+                        data-company="<%= u.company_id || '' %>"
+                        title="Asignar empresa">
+                  <i class="fa-solid fa-building"></i>
+                </button>
+                <% } %>
+
+                <form method="post" action="admin/users/<%= u.id %>/resend-activation" class="d-inline">
+                  <button type="submit" class="btn btn-outline-info" title="Generar enlace de activación">
+                    <i class="fa-solid fa-link"></i>
+                  </button>
+                </form>
+
                 <% if (u.status === 'active') { %>
-                  <form method="post" action="/admin/users/<%= u.id %>/suspend" class="d-inline">
+                  <form method="post" action="admin/users/<%= u.id %>/suspend" class="d-inline">
                     <button type="submit" class="btn btn-outline-warning" title="Suspender"><i class="fa-solid fa-pause"></i></button>
                   </form>
                 <% } else { %>
-                  <form method="post" action="/admin/users/<%= u.id %>/activate" class="d-inline">
+                  <form method="post" action="admin/users/<%= u.id %>/activate" class="d-inline">
                     <button type="submit" class="btn btn-outline-success" title="Activar"><i class="fa-solid fa-play"></i></button>
                   </form>
                 <% } %>
 
-                <form method="post" action="/admin/users/<%= u.id %>/role" class="d-inline">
-                  <input type="hidden" name="role" value="<%= u.role === 'admin' ? 'user' : 'admin' %>">
-                  <button type="submit" class="btn btn-outline-primary" title="Cambiar rol">
-                    <i class="fa-solid fa-user-shield"></i>
-                    <%= u.role === 'admin' ? 'a Usuario' : 'a Admin' %>
-                  </button>
-                </form>
+                <button type="button" class="btn btn-outline-primary"
+                        data-bs-toggle="modal" data-bs-target="#changeRoleModal"
+                        data-id="<%= u.id %>"
+                        data-name="<%= u.display_name %>"
+                        data-role="<%= u.role %>"
+                        title="Cambiar rol">
+                  <i class="fa-solid fa-user-shield"></i>
+                </button>
               </div>
             </td>
           </tr>
@@ -119,3 +191,158 @@
 </div>
 
 <p class="text-muted mt-2 small">Mostrando hasta 200 usuarios. Refina la búsqueda para acotar resultados.</p>
+
+<!-- Modal: New user -->
+<div class="modal fade" id="newUserModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="admin/users" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-user-plus me-2"></i>Crear usuario</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Se generará un enlace de activación. El usuario elegirá su propia contraseña.
+        </p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Email</label>
+          <input type="email" class="form-control" name="email" required maxlength="150" placeholder="persona@empresa.com">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Nombre</label>
+          <input type="text" class="form-control" name="display_name" required maxlength="100" placeholder="Ana Pérez">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Idioma nativo</label>
+          <select class="form-select" name="native_language">
+            <option value="">— Sin definir —</option>
+            <% (languages || []).forEach(function(l) { %>
+              <option value="<%= l.code %>"><%= l.name %></option>
+            <% }); %>
+          </select>
+        </div>
+        <% if (isSuper) { %>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Empresa</label>
+            <select class="form-select" name="company_id">
+              <option value="">— Sin empresa —</option>
+              <% (companies || []).forEach(function(c) { %>
+                <option value="<%= c.id %>"><%= c.code %> · <%= c.name %></option>
+              <% }); %>
+            </select>
+          </div>
+        <% } else { %>
+          <input type="hidden" name="company_id" value="<%= (companies && companies[0]) ? companies[0].id : '' %>">
+          <div class="mb-3">
+            <div class="alert alert-light small mb-0">
+              <i class="fa-solid fa-building me-1"></i>
+              Empresa:
+              <% if (companies && companies[0]) { %>
+                <code><%= companies[0].code %></code> · <%= companies[0].name %>
+              <% } else { %>
+                <em>Sin empresa asignada</em>
+              <% } %>
+            </div>
+          </div>
+        <% } %>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Rol</label>
+          <select class="form-select" name="role">
+            <option value="user" selected>Usuario</option>
+            <option value="company_admin">Admin de empresa</option>
+            <% if (isSuper) { %>
+              <option value="admin">Admin global</option>
+              <option value="superadmin">Superadmin</option>
+            <% } %>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane me-1"></i> Crear y generar enlace</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Assign company -->
+<% if (isSuper) { %>
+<div class="modal fade" id="assignCompanyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="" id="assignCompanyForm" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-building me-2"></i>Asignar empresa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Asignar empresa a <strong id="assignCompanyUserName"></strong>.</p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Empresa</label>
+          <select class="form-select" name="company_id" id="assignCompanySelect">
+            <option value="">— Sin empresa —</option>
+            <% (companies || []).forEach(function(c) { %>
+              <option value="<%= c.id %>"><%= c.code %> · <%= c.name %></option>
+            <% }); %>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+<% } %>
+
+<!-- Modal: Change role -->
+<div class="modal fade" id="changeRoleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="" id="changeRoleForm" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-user-shield me-2"></i>Cambiar rol</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Rol de <strong id="changeRoleUserName"></strong>:</p>
+        <select class="form-select" name="role" id="changeRoleSelect">
+          <option value="user">Usuario</option>
+          <option value="company_admin">Admin de empresa</option>
+          <% if (isSuper) { %>
+            <option value="admin">Admin global</option>
+            <option value="superadmin">Superadmin</option>
+          <% } %>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function() {
+  var assign = document.getElementById('assignCompanyModal');
+  if (assign) {
+    assign.addEventListener('show.bs.modal', function(event) {
+      var button = event.relatedTarget;
+      if (!button) return;
+      document.getElementById('assignCompanyForm').action = 'admin/users/' + button.getAttribute('data-id') + '/company';
+      document.getElementById('assignCompanyUserName').textContent = button.getAttribute('data-name') || '';
+      document.getElementById('assignCompanySelect').value = button.getAttribute('data-company') || '';
+    });
+  }
+  var role = document.getElementById('changeRoleModal');
+  if (role) {
+    role.addEventListener('show.bs.modal', function(event) {
+      var button = event.relatedTarget;
+      if (!button) return;
+      document.getElementById('changeRoleForm').action = 'admin/users/' + button.getAttribute('data-id') + '/role';
+      document.getElementById('changeRoleUserName').textContent = button.getAttribute('data-name') || '';
+      document.getElementById('changeRoleSelect').value = button.getAttribute('data-role') || 'user';
+    });
+  }
+})();
+</script>

@@ -245,61 +245,56 @@
       const me = normLang(ctx.myLang);
       const them = normLang(peerEntry.sourceLang);
 
-      // PRE-LIVE GUARD: if the interpreter is still connecting but we
-      // already know this peer speaks a DIFFERENT language than ours, mute
-      // their raw <video> so the user doesn't hear them untranslated while
-      // OpenAI is finishing the handshake. Once the interpreter goes live,
-      // startInterpreter's onStatus will call this function again for every
-      // peer and the audio will be routed through the mixer.
-      if (interpreter && interpreter.state !== 'live') {
-        if (them && them !== me) {
-          try { peerEntry.tile.video.muted = true; } catch (_) {}
-        }
-        return;
-      }
+      // ─── DECISION TREE ───────────────────────────────────────────
+      // Three independent inputs decide what we do:
+      //   1. Do we have an interpreter at all?
+      //   2. Do we know the peer's language? (them)
+      //   3. Is the peer's language different from ours?
+      //
+      // The OLD bug: when the interpreter was still `connecting`, we did
+      // `return` BEFORE calling `interpreter.addPeerAudio()`. The interpreter
+      // already supports being fed BEFORE it's live (it stashes the stream
+      // and re-wires it once the mixer is up — see `_rewirePeerSources`).
+      // So we should ALWAYS register the stream as soon as we know the peer
+      // speaks a different language. The "live vs connecting" state of the
+      // interpreter is irrelevant for that decision.
+      // ────────────────────────────────────────────────────────────
+
       if (!interpreter) {
-        // No interpreter at all — keep raw P2P audio audible.
+        // No interpreter at all → user is listening to raw P2P audio.
         try { peerEntry.tile.video.muted = false; } catch (_) {}
         return;
       }
 
-      // CRITICAL ANTI-ECHO GUARD:
-      // 1. If we don't yet KNOW the peer's language (sourceLang empty), DO NOT
-      //    feed them to OpenAI. But ALSO keep the <video> muted so the user
-      //    doesn't hear the raw peer while we wait. Otherwise the peer plays
-      //    untranslated for a fraction of a second, and worse, the model can
-      //    later echo the same audio.
-      // 2. If the peer speaks MY language, never feed them — keep the original
-      //    P2P audio. No translation needed.
+      // Don't feed if we don't yet know the peer's language. Mute the
+      // <video> so the user doesn't briefly hear untranslated speech.
       if (!them) {
-        console.log('[room] pipe SKIP peer=' + peerSocketId +
-                    ' reason=no-lang-yet (keeping video muted) me=' + me);
+        console.log('[room] pipe WAIT peer=' + peerSocketId +
+                    ' reason=no-lang-yet me=' + me);
         try { peerEntry.tile.video.muted = true; } catch (_) {}
         try { interpreter.removePeerAudio(peerSocketId); } catch (_) {}
         return;
       }
+
+      // Peer speaks my language → don't translate. Play raw P2P audio.
       if (them === me) {
         console.log('[room] pipe SKIP peer=' + peerSocketId +
-                    ' reason=same-lang me=' + me + ' them=' + them +
-                    ' (unmuting raw P2P audio)');
+                    ' reason=same-lang me=' + me + ' them=' + them);
         try { peerEntry.tile.video.muted = false; } catch (_) {}
         try { interpreter.removePeerAudio(peerSocketId); } catch (_) {}
         return;
       }
 
-      // Different language confirmed → mute original audio and route to OpenAI.
+      // Different language → route audio through the interpreter.
       const feedStream = peerEntry.audioStream || peerEntry.stream;
       if (!feedStream || !feedStream.getAudioTracks().length) {
-        console.log('[room] no audio yet for peer ' + peerSocketId + ' — will retry on ontrack');
+        console.log('[room] no audio yet for peer ' + peerSocketId +
+                    ' — will retry on ontrack');
         try { peerEntry.tile.video.muted = true; } catch (_) {}
         return;
       }
 
-      // ABSOLUTE SAFETY: make sure we are NEVER feeding our own microphone
-      // into the interpreter mixer. If even one track in `feedStream` matches
-      // a track from `localStream`, that's a bug somewhere upstream (browser
-      // loopback, mis-routed addTrack, etc) and would cause the user to hear
-      // themselves echoed back by OpenAI in their own language.
+      // ABSOLUTE SAFETY: never feed our own microphone into the mixer.
       const localTrackIds = new Set(
         (localStream ? localStream.getAudioTracks() : []).map(t => t.id)
       );
@@ -323,11 +318,20 @@
         return;
       }
 
+      // Mute the raw <video> so the user only hears the translated voice.
+      try { peerEntry.tile.video.muted = true; } catch (_) {}
+
+      // Hand the stream to the interpreter. If the mixer isn't ready yet
+      // (state != 'live'), the interpreter stashes the stream and wires it
+      // in on the next successful connect. THIS is the line that was being
+      // skipped by the old early-return — the root cause of the bug.
       console.log('[room] pipe FEED peer=' + peerSocketId +
                   ' me=' + me + ' them=' + them +
-                  ' tracks=' + safeStream.getAudioTracks().length);
-      try { peerEntry.tile.video.muted = true; } catch (_) {}
-      try { interpreter.addPeerAudio(safeStream, peerSocketId); } catch (_) {}
+                  ' tracks=' + safeStream.getAudioTracks().length +
+                  ' interpState=' + interpreter.state);
+      try { interpreter.addPeerAudio(safeStream, peerSocketId); } catch (e) {
+        console.warn('[room] addPeerAudio threw:', e && e.message);
+      }
     }
 
     // Re-evaluate auto-routing whenever peers or languages change.

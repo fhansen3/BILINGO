@@ -16,8 +16,13 @@ const pool = mysql.createPool({
   charset: 'utf8mb4'
 });
 
+// NOTE: we use pool.query() instead of pool.execute() because mysql2's
+// prepared-statement protocol (execute) does NOT accept bound parameters
+// for LIMIT / OFFSET / INTERVAL ? DAY — MySQL rejects them with
+// ER_WRONG_ARGUMENTS ("Incorrect arguments to mysqld_stmt_execute").
+// pool.query() still escapes parameters safely via the text protocol.
 async function query(sql, params) {
-  const [rows] = await pool.execute(sql, params);
+  const [rows] = await pool.query(sql, params);
   return rows;
 }
 

@@ -35,7 +35,16 @@
   }
 
   function getUser() { return currentUser; }
-  function isAdmin() { return currentUser && currentUser.role === 'admin'; }
+  function isAdmin() {
+    if (!currentUser) return false;
+    var r = currentUser.role;
+    return r === 'admin' || r === 'superadmin' || r === 'company_admin';
+  }
+  function isSuperAdmin() {
+    if (!currentUser) return false;
+    var r = currentUser.role;
+    return r === 'admin' || r === 'superadmin';
+  }
 
-  window.Auth = { check: check, login: login, register: register, logout: logout, getUser: getUser, isAdmin: isAdmin };
+  window.Auth = { check: check, login: login, register: register, logout: logout, getUser: getUser, isAdmin: isAdmin, isSuperAdmin: isSuperAdmin };
 })();

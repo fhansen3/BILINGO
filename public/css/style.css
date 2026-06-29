@@ -476,6 +476,97 @@ p { line-height: 1.55; color: var(--text); }
 .step-card h3 i { color: var(--green); }
 .step-card p { color: var(--text-soft); line-height: 1.5; font-size: 0.92rem; margin: 0; }
 
+/* SECURITY & PRIVACY */
+.security-section {
+  padding: 80px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(88,204,2,0.06) 0%, transparent 50%),
+    radial-gradient(circle at 80% 100%, rgba(28,176,246,0.05) 0%, transparent 50%);
+}
+.security-section .section-eyebrow {
+  background: #E8F8D6;
+  color: var(--green-dark) !important;
+}
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+.security-card {
+  background: white;
+  border-radius: 18px;
+  padding: 28px 24px;
+  border: 2px solid #EDF1F5;
+  transition: all 0.25s ease;
+  position: relative;
+  text-align: left;
+}
+.security-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--green);
+  box-shadow: 0 16px 32px -10px rgba(88,204,2,0.20);
+}
+.security-card .security-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: white;
+  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
+  margin-bottom: 16px;
+  box-shadow: 0 6px 14px rgba(88,204,2,0.25);
+}
+.security-card h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+.security-card p {
+  color: var(--text-soft);
+  font-size: 0.93rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.security-card p strong { color: var(--text); font-weight: 800; }
+.security-card p code {
+  background: #F0FBE3;
+  color: var(--green-dark);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: 'SFMono-Regular', Consolas, Monaco, monospace;
+}
+.security-footnote {
+  max-width: 760px;
+  margin: 40px auto 0;
+  text-align: center;
+  background: white;
+  border: 2px dashed var(--green);
+  border-radius: 14px;
+  padding: 16px 22px;
+  font-size: 0.92rem;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+.security-footnote i {
+  color: var(--green);
+  margin-right: 6px;
+}
+
+@media (max-width: 900px) {
+  .security-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .security-grid { grid-template-columns: 1fr; }
+}
+
 /* USE CASES */
 .usecases { padding: 80px 24px; max-width: 1200px; margin: 0 auto; }
 .usecases-grid {

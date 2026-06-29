@@ -1,0 +1,222 @@
+<%- include('partials/admin-subnav', { active: 'costs' }) %>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3 mb-1">Costos de IA</h1>
+    <p class="text-muted mb-0">
+      <% if (isSuper) { %>Vista global de toda la plataforma.<% } else { %>Vista de tu empresa.<% } %>
+    </p>
+  </div>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <label class="small text-muted mb-0">Margen objetivo:</label>
+    <input type="number" name="margin" value="<%= marginPct %>" min="0" max="1000" step="10"
+           class="form-control form-control-sm" style="width:90px;">
+    <span class="small text-muted">%</span>
+    <button type="submit" class="btn btn-sm btn-outline-primary">Aplicar</button>
+  </form>
+</div>
+
+<!-- KPIs -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small">Costo hoy</div>
+        <div class="display-6 fw-bold">$<%= Number(totals.cost_today || 0).toFixed(2) %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small">Últimos 7 días</div>
+        <div class="display-6 fw-bold">$<%= Number(totals.cost_7d || 0).toFixed(2) %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small">Últimos 30 días</div>
+        <div class="display-6 fw-bold">$<%= Number(totals.cost_30d || 0).toFixed(2) %></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted small">Costo total</div>
+        <div class="display-6 fw-bold">$<%= Number(totals.cost_total || 0).toFixed(2) %></div>
+        <div class="small text-muted mt-1"><%= Number(totals.tokens_total || 0).toLocaleString() %> tokens · <%= Number(totals.calls_total || 0).toLocaleString() %> llamadas</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pricing card -->
+<div class="card mb-4 border-success">
+  <div class="card-body">
+    <div class="row g-3 align-items-center">
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Minutos de audio procesados</div>
+        <div class="h4 mb-0"><%= audioMinutes.toFixed(1) %> min</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">Costo por minuto (real)</div>
+        <div class="h4 mb-0">$<%= costPerMinute.toFixed(4) %></div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small mb-1">
+          Precio sugerido por minuto
+          <span class="badge bg-success ms-1">+<%= marginPct %>% margen</span>
+        </div>
+        <div class="h3 mb-0 text-success">$<%= suggestedPricePerMinute.toFixed(4) %></div>
+        <% if (audioMinutes <= 0) { %>
+          <div class="small text-muted mt-1"><i class="fa-solid fa-circle-info me-1"></i>Aún no hay minutos de audio procesados.</div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Daily cost chart -->
+<div class="card mb-4">
+  <div class="card-header bg-white"><strong>Costo diario (últimos 30 días)</strong></div>
+  <div class="card-body">
+    <canvas id="chartDaily" height="80"></canvas>
+  </div>
+</div>
+
+<!-- Cost by model + Top users -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-white"><strong>Costo por modelo</strong></div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr><th>Modelo</th><th class="text-end">Llamadas</th><th class="text-end">Tokens</th><th class="text-end">USD</th></tr>
+          </thead>
+          <tbody>
+            <% (byModel || []).forEach(function(m){ %>
+              <tr>
+                <td><code><%= m.model %></code></td>
+                <td class="text-end"><%= Number(m.calls || 0).toLocaleString() %></td>
+                <td class="text-end"><%= Number(m.tokens || 0).toLocaleString() %></td>
+                <td class="text-end fw-bold">$<%= Number(m.cost_usd || 0).toFixed(4) %></td>
+              </tr>
+            <% }) %>
+            <% if (!byModel || !byModel.length) { %>
+              <tr><td colspan="4" class="text-center text-muted py-3">Sin datos.</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header bg-white"><strong>Top usuarios por gasto</strong></div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Usuario</th><th class="text-end">Llamadas</th><th class="text-end">Tokens</th><th class="text-end">USD</th></tr></thead>
+          <tbody>
+            <% (topUsers || []).forEach(function(u){ %>
+              <tr>
+                <td><%= u.display_name || u.email %><div class="small text-muted"><%= u.email %></div></td>
+                <td class="text-end"><%= Number(u.calls || 0).toLocaleString() %></td>
+                <td class="text-end"><%= Number(u.tokens || 0).toLocaleString() %></td>
+                <td class="text-end fw-bold">$<%= Number(u.cost_usd || 0).toFixed(4) %></td>
+              </tr>
+            <% }) %>
+            <% if (!topUsers || !topUsers.length) { %>
+              <tr><td colspan="4" class="text-center text-muted py-3">Sin datos.</td></tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<% if (isSuper) { %>
+<div class="card mb-4">
+  <div class="card-header bg-white"><strong>Top empresas por gasto</strong></div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Empresa</th><th class="text-end">Llamadas</th><th class="text-end">Tokens</th><th class="text-end">USD</th></tr></thead>
+      <tbody>
+        <% (topCompanies || []).forEach(function(c){ %>
+          <tr>
+            <td>
+              <% if (c.code) { %><code class="me-1"><%= c.code %></code><%= c.name %><% } else { %><em class="text-muted">Sin empresa</em><% } %>
+            </td>
+            <td class="text-end"><%= Number(c.calls || 0).toLocaleString() %></td>
+            <td class="text-end"><%= Number(c.tokens || 0).toLocaleString() %></td>
+            <td class="text-end fw-bold">$<%= Number(c.cost_usd || 0).toFixed(4) %></td>
+          </tr>
+        <% }) %>
+        <% if (!topCompanies || !topCompanies.length) { %>
+          <tr><td colspan="4" class="text-center text-muted py-3">Sin datos.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+<!-- Recent calls -->
+<div class="card">
+  <div class="card-header bg-white"><strong>Últimas llamadas a IA</strong> <span class="text-muted small">(últimas <%= recent.length %>)</span></div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Usuario</th><th>Modelo</th><th>Op.</th><th>Pares</th>
+          <th class="text-end">Tokens (in/out/total)</th>
+          <th class="text-end">USD</th>
+          <th class="text-end">Latencia</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (recent || []).forEach(function(c){ %>
+          <tr>
+            <td class="small text-muted"><%= c.created_at ? new Date(c.created_at).toISOString().replace('T',' ').slice(0,16) : '' %></td>
+            <td class="small"><%= c.user_name || c.user_email || '—' %></td>
+            <td><code class="small"><%= c.model %></code></td>
+            <td class="small"><%= c.operation %><% if (c.was_cached) { %> <span class="badge bg-info">cached</span><% } %></td>
+            <td class="small text-muted"><%= c.source_lang || '?' %> → <%= c.target_lang || '?' %></td>
+            <td class="text-end small"><%= c.prompt_tokens %>/<%= c.completion_tokens %>/<strong><%= c.total_tokens %></strong></td>
+            <td class="text-end fw-bold">$<%= Number(c.total_cost_usd || 0).toFixed(6) %></td>
+            <td class="text-end small text-muted"><%= c.latency_ms != null ? c.latency_ms + ' ms' : '—' %></td>
+          </tr>
+        <% }) %>
+        <% if (!recent || !recent.length) { %>
+          <tr><td colspan="8" class="text-center text-muted py-3">Sin llamadas registradas todavía.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  var data = <%- JSON.stringify(dailyChart || {labels:[], values:[]}) %>;
+  var ctx = document.getElementById('chartDaily');
+  if (ctx && window.Chart) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [{ label: 'USD/día', data: data.values, backgroundColor: '#58CC02' }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { ticks: { callback: function(v){ return '$' + Number(v).toFixed(2); } } } }
+      }
+    });
+  }
+})();
+</script>
