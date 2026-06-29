@@ -265,16 +265,26 @@
 .video-grid.solo { grid-template-columns: 1fr; }
 
 .video-tile {
-  background: #2a2a2a;
+  background: #000;
   border-radius: var(--radius);
   position: relative;
   overflow: hidden;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
 }
+/* object-fit:contain → la cámara se muestra completa sin recortes (sin
+   efecto "zoom" en móviles donde la cámara suele ser 4:3 y el tile es 16:9).
+   El espacio sobrante queda cubierto por el fondo negro del tile. */
 .video-tile video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+/* En móvil, el tile sigue la relación natural de la cámara para evitar
+   bandas negras innecesarias arriba/abajo. */
+@media (max-width: 640px) {
+  .video-tile { aspect-ratio: auto; min-height: 220px; }
 }
 .video-tile .tile-label {
   position: absolute;
@@ -517,6 +527,20 @@
   border-radius: var(--radius-lg);
   padding: 16px;
   min-height: 360px;
+}
+/* Tiles dentro de .videos (vistas legacy: in_meeting_room.ejs, etc.) — mismo
+   criterio que .video-tile / .tile para no recortar la cámara en móvil. */
+.videos > video,
+.videos .video-wrap > video,
+.videos .video-slot > video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+@media (max-width: 640px) {
+  .videos { grid-template-columns: 1fr; padding: 10px; gap: 10px; min-height: 0; }
 }
 
 .media-controls {

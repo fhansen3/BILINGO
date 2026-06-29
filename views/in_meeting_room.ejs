@@ -106,6 +106,15 @@
       display: flex; align-items: center; justify-content: center;
     }
     .bm-tile.local { border-color: var(--bm-accent); }
+    /* Si en el futuro se inyecta un <video> dentro del tile, que no se
+       recorte (object-fit:contain) ni se "zoomee" la cara en móviles. */
+    .bm-tile video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
     .bm-tile-avatar {
       width: 64px; height: 64px; border-radius: 50%;
       background: var(--bm-accent);
@@ -289,6 +298,12 @@
       .bm-room-header .bm-meta { display: none; }
       .bm-ctrl { width: 40px; height: 40px; }
       .bm-side-panel { width: 100%; }
+      /* En móvil: una sola columna de tiles, sin aspect-ratio fijo (la cámara
+         se ve completa con su ratio nativo). */
+      .bm-grid { grid-template-columns: 1fr; gap: 10px; }
+      .bm-tile { aspect-ratio: auto; min-height: 180px; }
+      .bm-active-speaker { flex: 0 0 28%; min-height: 140px; }
+      .bm-room-body { padding: 10px 12px 110px; gap: 10px; }
     }
   </style>
 </head>

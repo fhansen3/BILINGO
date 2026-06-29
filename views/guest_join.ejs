@@ -17,8 +17,12 @@
         </div>
 
         <div class="ratio ratio-16x9 bg-dark rounded mb-3 position-relative overflow-hidden">
+          <!-- object-fit:contain → muestra la cámara completa sin recortar.
+               En móvil la cámara suele ser 4:3 y el contenedor es 16:9; con
+               `cover` se recortaba (efecto zoom). Con `contain` queda con
+               franjas negras pero la imagen es fiel. -->
           <video id="guestPreview" autoplay muted playsinline
-                 style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
+                 style="width:100%;height:100%;object-fit:contain;transform:scaleX(-1);background:#000;"></video>
           <div id="guestPreviewMsg"
                class="position-absolute top-50 start-50 translate-middle text-white text-center small"
                style="display:none;">
